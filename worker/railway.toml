@@ -1,0 +1,9 @@
+[build]
+builder = "nixpacks"
+ignorePaths = ["supabase/functions/**"]
+
+[deploy]
+startCommand = "python -u worker.py"
+
+[build.environment]
+PYTHON_VERSION = "3.11"

@@ -1,0 +1,889 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  /* 
+   * Establish smooth scrolling as the default behavior.
+   * This creates gentle navigation when jumping to anchors or sections.
+   */
+  html {
+    scroll-behavior: smooth;
+    /* Prevent horizontal scroll on mobile devices */
+    overflow-x: hidden;
+  }
+
+  body {
+    /* Ensure body doesn't create unexpected scrollbars */
+    overflow-x: hidden;
+    /* Create a stable baseline for mobile viewport height */
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+    min-height: -webkit-fill-available;
+  }
+
+  /* 
+   * Set a consistent, calm easing function for all transitions.
+   * This cubic-bezier creates a decisive start with a very gentle finish.
+   */
+  *,
+  *::before,
+  *::after {
+    transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+
+  /* 
+   * Accessibility: Respect user preferences for reduced motion.
+   * This is crucial for users with vestibular disorders who experience
+   * dizziness or nausea from animations.
+   */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  /* 
+   * Add scroll padding to account for fixed headers on mobile.
+   * This ensures anchor links don't hide content under the header.
+   */
+  * {
+    scroll-padding-top: 4rem;
+  }
+
+  /* 
+   * Improve tap targets on mobile devices.
+   * Remove the tap highlight that can feel jarring.
+   */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* 
+   * Enhance font rendering for smoother text appearance,
+   * especially important during transitions.
+   */
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  :root {
+    /* Design System Colors */
+    /* Primary Colors */
+    --color-primary-50: 263 70% 85%;    /* Backgrounds */
+    --color-primary-100: 263 70% 80%;
+    --color-primary-200: 263 70% 70%;
+    --color-primary-300: 263 70% 60%;
+    --color-primary-400: 263 70% 55%;  /* Hover states */
+    --color-primary-500: 263 70% 50%;  /* Main brand color */
+    --color-primary-600: 263 70% 45%;  /* Active states */
+    --color-primary-700: 263 70% 35%;
+    --color-primary-800: 263 70% 25%;
+    --color-primary-900: 263 70% 15%;  /* Text on light backgrounds */
+
+    /* Secondary Colors */
+    --color-secondary-300: 217 91% 65%;  /* Hover states */
+    --color-secondary-400: 217 91% 60%;  /* Complementary brand color */
+    --color-secondary-500: 217 91% 50%;  /* Active states */
+
+    /* Neutral Colors */
+    --color-neutral-50: 0 0% 98%;   /* Light backgrounds */
+    --color-neutral-100: 0 0% 95%;  /* Lighter backgrounds */
+    --color-neutral-200: 0 0% 90%;  /* Subtle borders */
+    --color-neutral-300: 0 0% 80%;  /* Light borders */
+    --color-neutral-400: 0 0% 65%;  /* Medium text */
+    --color-neutral-500: 0 0% 50%;  /* Placeholder text */
+    --color-neutral-600: 0 0% 40%;  /* Secondary text */
+    --color-neutral-700: 0 0% 25%;  /* Primary text on light */
+    --color-neutral-800: 0 0% 15%;  /* Dark text */
+    --color-neutral-900: 0 0% 10%;  /* Darker text */
+
+    /* Status Colors */
+    --color-success-500: 120 60% 40%;  /* Success states */
+    --color-warning-500: 45 100% 50%;  /* Warning states */
+    --color-error-500: 0 84.2% 45%;    /* Error states */
+    --color-info-500: 200 100% 45%;    /* Informational states */
+
+    /* Existing shadcn/ui colors */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 5%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 5%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 263 70% 60%;
+
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 263 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 20%;
+    --input: 240 5% 15%;
+    --ring: 263 70% 50%;
+
+    --radius: 0.75rem;
+    
+    --gradient-primary: linear-gradient(135deg, hsl(263 70% 50%), hsl(217 91% 60%));
+    --gradient-mesh: radial-gradient(at 0% 0%, hsl(263 70% 50% / 0.3) 0px, transparent 50%),
+                      radial-gradient(at 100% 0%, hsl(217 91% 60% / 0.2) 0px, transparent 50%),
+                      radial-gradient(at 100% 100%, hsl(263 70% 50% / 0.2) 0px, transparent 50%);
+    --shadow-glow: 0 0 40px hsl(263 70% 50% / 0.3);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Spacing System (Base Unit: 4px = 0.25rem) */
+    --spacing-unit: 0.25rem;  /* 4px base unit */
+    --spacing-0: 0rem;        /* 0px */
+    --spacing-1: 0.25rem;     /* 4px */
+    --spacing-2: 0.5rem;      /* 8px */
+    --spacing-3: 0.75rem;     /* 12px */
+    --spacing-4: 1rem;        /* 16px */
+    --spacing-5: 1.25rem;     /* 20px */
+    --spacing-6: 1.5rem;      /* 24px */
+    --spacing-8: 2rem;        /* 32px */
+    --spacing-12: 3rem;       /* 48px */
+    --spacing-16: 4rem;       /* 64px */
+
+    /* Spacing aliases */
+    --spacing-xs: 0.5rem;   /* 8px */
+    --spacing-sm: 1rem;     /* 16px */
+    --spacing-md: 1.5rem;   /* 24px */
+    --spacing-lg: 2rem;     /* 32px */
+    --spacing-xl: 3rem;     /* 48px */
+    --spacing-2xl: 4rem;    /* 64px */
+
+    /* Message Spacing */
+    --message-gap: 1rem;    /* 16px between messages */
+    --message-padding-y: 1rem;  /* 16px vertical padding */
+    --message-padding-x: 1.25rem; /* 20px horizontal padding */
+    --message-max-width: 70%; /* Max 70% of container width */
+
+    /* Sidebar Spacing */
+    --sidebar-padding: 1.25rem; /* 20px */
+    --sidebar-item-gap: 0.75rem; /* 12px between items */
+    --sidebar-width: 20rem; /* 320px */
+    --sidebar-width-collapsed: 4rem; /* 64px */
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Design System Colors for Dark Theme */
+    /* Primary Colors */
+    --color-primary-50: 263 70% 10%;    /* Backgrounds */
+    --color-primary-100: 263 70% 15%;
+    --color-primary-200: 263 70% 25%;
+    --color-primary-300: 263 70% 35%;
+    --color-primary-400: 263 70% 45%;  /* Hover states */
+    --color-primary-500: 263 70% 50%;  /* Main brand color */
+    --color-primary-600: 263 70% 55%;  /* Active states */
+    --color-primary-700: 263 70% 65%;
+    --color-primary-800: 263 70% 75%;
+    --color-primary-900: 263 70% 85%;  /* Text on light backgrounds */
+
+    /* Secondary Colors */
+    --color-secondary-300: 217 91% 50%;  /* Hover states */
+    --color-secondary-400: 217 91% 55%;  /* Complementary brand color */
+    --color-secondary-500: 217 91% 60%;  /* Active states */
+
+    /* Neutral Colors */
+    --color-neutral-50: 0 0% 5%;    /* Light backgrounds */
+    --color-neutral-100: 0 0% 10%;  /* Lighter backgrounds */
+    --color-neutral-200: 0 0% 15%;  /* Subtle borders */
+    --color-neutral-300: 0 0% 25%;  /* Light borders */
+    --color-neutral-400: 0 0% 40%;  /* Medium text */
+    --color-neutral-500: 0 0% 50%;  /* Placeholder text */
+    --color-neutral-600: 0 0% 60%;  /* Secondary text */
+    --color-neutral-700: 0 0% 75%;  /* Primary text on light */
+    --color-neutral-800: 0 0% 85%;  /* Dark text */
+    --color-neutral-900: 0 0% 95%;  /* Darker text */
+
+    /* Status Colors */
+    --color-success-500: 120 60% 50%;  /* Success states */
+    --color-warning-500: 45 100% 60%;  /* Warning states */
+    --color-error-500: 0 84.2% 55%;    /* Error states */
+    --color-info-500: 200 100% 55%;    /* Informational states */
+
+    /* Existing shadcn/ui colors */
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+
+    --card: 240 10% 5%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 240 10% 5%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 263 70% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 263 70% 60%;
+
+    --secondary: 217 91% 60%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 5% 15%;
+    --muted-foreground: 240 5% 65%;
+
+    --accent: 263 70% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 5% 20%;
+    --input: 240 5% 15%;
+    --ring: 263 70% 50%;
+    
+    --sidebar-background: 240 10% 5%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 263 70% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 5% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 240 5% 20%;
+    --sidebar-ring: 263 70% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+
+    font-size: 16px;
+    line-height: 1.6;
+  }
+
+  /* Typography improvements */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold leading-tight;
+  }
+
+  h1 {
+    @apply text-2xl;
+  }
+
+  h2 {
+    @apply text-xl;
+  }
+
+  h3 {
+    @apply text-lg;
+  }
+
+  p {
+    @apply leading-relaxed;
+  }
+
+  /* Better text contrast and readability */
+  .text-muted-foreground {
+    color: hsl(var(--muted-foreground) / 0.8);
+  }
+
+  /* Improved focus states */
+  .focus-visible {
+    @apply outline-none ring-2 ring-primary/50 ring-offset-2 ring-offset-background;
+  }
+
+  /* Spacing utilities */
+  .space-message {
+    gap: var(--message-gap);
+  }
+
+  .p-message {
+    padding: var(--message-padding-y) var(--message-padding-x);
+  }
+
+  .max-w-message {
+    max-width: var(--message-max-width);
+  }
+
+  .p-sidebar {
+    padding: var(--sidebar-padding);
+  }
+
+  .space-sidebar-item {
+    gap: var(--sidebar-item-gap);
+  }
+
+  /* Additional visual polish */
+  .glass-effect {
+    backdrop-filter: blur(8px);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .shadow-glow {
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.2);
+  }
+
+  .shadow-glow-hover:hover {
+    box-shadow: 0 0 30px hsl(var(--primary) / 0.3);
+  }
+
+  /* Smooth scrolling */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+  }
+
+  /* Better selection colors */
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+    color: hsl(var(--primary-foreground));
+  }
+
+  /* Design System Color Classes */
+  .text-primary-50 { color: hsl(var(--color-primary-50)); }
+  .text-primary-100 { color: hsl(var(--color-primary-100)); }
+  .text-primary-200 { color: hsl(var(--color-primary-200)); }
+  .text-primary-300 { color: hsl(var(--color-primary-300)); }
+  .text-primary-400 { color: hsl(var(--color-primary-400)); }
+  .text-primary-500 { color: hsl(var(--color-primary-500)); }
+  .text-primary-600 { color: hsl(var(--color-primary-600)); }
+  .text-primary-700 { color: hsl(var(--color-primary-700)); }
+  .text-primary-800 { color: hsl(var(--color-primary-800)); }
+  .text-primary-900 { color: hsl(var(--color-primary-900)); }
+
+  .bg-primary-50 { background-color: hsl(var(--color-primary-50)); }
+  .bg-primary-100 { background-color: hsl(var(--color-primary-100)); }
+  .bg-primary-200 { background-color: hsl(var(--color-primary-200)); }
+  .bg-primary-300 { background-color: hsl(var(--color-primary-300)); }
+  .bg-primary-400 { background-color: hsl(var(--color-primary-400)); }
+  .bg-primary-500 { background-color: hsl(var(--color-primary-500)); }
+  .bg-primary-600 { background-color: hsl(var(--color-primary-600)); }
+  .bg-primary-700 { background-color: hsl(var(--color-primary-700)); }
+  .bg-primary-800 { background-color: hsl(var(--color-primary-800)); }
+  .bg-primary-900 { background-color: hsl(var(--color-primary-900)); }
+
+  .text-secondary-300 { color: hsl(var(--color-secondary-300)); }
+  .text-secondary-400 { color: hsl(var(--color-secondary-400)); }
+  .text-secondary-500 { color: hsl(var(--color-secondary-500)); }
+
+  .bg-secondary-300 { background-color: hsl(var(--color-secondary-300)); }
+  .bg-secondary-400 { background-color: hsl(var(--color-secondary-400)); }
+  .bg-secondary-500 { background-color: hsl(var(--color-secondary-500)); }
+
+  .text-neutral-50 { color: hsl(var(--color-neutral-50)); }
+  .text-neutral-100 { color: hsl(var(--color-neutral-100)); }
+  .text-neutral-200 { color: hsl(var(--color-neutral-200)); }
+  .text-neutral-300 { color: hsl(var(--color-neutral-300)); }
+  .text-neutral-400 { color: hsl(var(--color-neutral-400)); }
+  .text-neutral-500 { color: hsl(var(--color-neutral-500)); }
+  .text-neutral-600 { color: hsl(var(--color-neutral-600)); }
+  .text-neutral-700 { color: hsl(var(--color-neutral-700)); }
+  .text-neutral-800 { color: hsl(var(--color-neutral-800)); }
+  .text-neutral-900 { color: hsl(var(--color-neutral-900)); }
+
+  .bg-neutral-50 { background-color: hsl(var(--color-neutral-50)); }
+  .bg-neutral-100 { background-color: hsl(var(--color-neutral-100)); }
+  .bg-neutral-200 { background-color: hsl(var(--color-neutral-200)); }
+  .bg-neutral-300 { background-color: hsl(var(--color-neutral-300)); }
+  .bg-neutral-400 { background-color: hsl(var(--color-neutral-400)); }
+  .bg-neutral-500 { background-color: hsl(var(--color-neutral-500)); }
+  .bg-neutral-600 { background-color: hsl(var(--color-neutral-600)); }
+  .bg-neutral-700 { background-color: hsl(var(--color-neutral-700)); }
+  .bg-neutral-800 { background-color: hsl(var(--color-neutral-800)); }
+  .bg-neutral-900 { background-color: hsl(var(--color-neutral-900)); }
+
+  .text-success-500 { color: hsl(var(--color-success-500)); }
+  .bg-success-500 { background-color: hsl(var(--color-success-500)); }
+
+  .text-warning-500 { color: hsl(var(--color-warning-500)); }
+  .bg-warning-500 { background-color: hsl(var(--color-warning-500)); }
+
+  .text-error-500 { color: hsl(var(--color-error-500)); }
+  .bg-error-500 { background-color: hsl(var(--color-error-500)); }
+
+  .text-info-500 { color: hsl(var(--color-info-500)); }
+  .bg-info-500 { background-color: hsl(var(--color-info-500)); }
+}
+
+@layer utilities {
+  /* 
+   * Standard smooth transition for most UI elements.
+   * Use this for buttons, cards, and general interactive elements.
+   */
+  .transition-smooth {
+    transition-property: all;
+    transition-duration: 300ms;
+    transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+
+  /* 
+   * Fast transition for immediate feedback elements.
+   * Use this for hover states and small micro-interactions.
+   */
+  .transition-smooth-fast {
+    transition-property: all;
+    transition-duration: 150ms;
+    transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+
+  /* 
+   * Slow transition for major UI changes.
+   * Use this for page transitions, modal opens, and drawer slides.
+   */
+  .transition-smooth-slow {
+    transition-property: all;
+    transition-duration: 500ms;
+    transition-timing-function: cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+
+  /* 
+   * Gentle spring effect for entrance animations.
+   * This creates a soft "bounce" that feels organic and friendly.
+   */
+  .transition-spring {
+    transition-property: all;
+    transition-duration: 400ms;
+    transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  /* 
+   * Fade transitions for content changes.
+   * These apply only to opacity for performance.
+   */
+  .fade-in {
+    animation: fadeIn 300ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+  }
+
+  .fade-out {
+    animation: fadeOut 300ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+  }
+
+  /* 
+   * Slide transitions for panels and drawers.
+   * Combines movement with opacity for depth.
+   */
+  .slide-in-right {
+    animation: slideInRight 400ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+  }
+
+  .slide-in-left {
+    animation: slideInLeft 400ms cubic-bezier(0.4, 0.0, 0.2, 1) forwards;
+  }
+
+  .slide-in-up {
+    animation: slideInUp 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .slide-in-down {
+    animation: slideInDown 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  /* 
+   * Gentle pulse for loading states.
+   * Much slower than typical loading animations for a calmer feel.
+   */
+  .pulse-gentle {
+    animation: pulseGentle 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* 
+   * Mobile-specific utilities for touch interactions.
+   */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+
+  /* 
+   * Safe area padding for devices with notches.
+   * This ensures content doesn't hide behind iPhone notches, etc.
+   */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* 
+   * Responsive container that adapts smoothly to all screen sizes.
+   */
+  .container-responsive {
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* 
+   * Mobile viewport height utilities for better mobile handling.
+   */
+  .h-screen-mobile {
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile */
+    height: -webkit-fill-available;
+  }
+
+  .min-h-screen-mobile {
+    min-height: 100vh;
+    min-height: 100dvh; /* Dynamic viewport height for mobile */
+    min-height: -webkit-fill-available;
+  }
+
+  @media (min-width: 640px) {
+    .container-responsive {
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container-responsive {
+      padding-left: 2rem;
+      padding-right: 2rem;
+    }
+  }
+
+  @media (min-width: 1280px) {
+    .container-responsive {
+      max-width: 1400px;
+    }
+  }
+
+  /* Scale utilities for smooth interactions based on interaction specifications */
+  .hover\:scale-102:hover {
+    transform: scale(1.02);
+  }
+
+  .active\:scale-98:active {
+    transform: scale(0.98);
+  }
+
+  /* Button interaction utilities */
+  .btn-hover-scale {
+    transition: transform 150ms cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  
+  .btn-hover-scale:hover {
+    transform: scale(1.02);
+  }
+  
+  .btn-active-scale:active {
+    transform: scale(0.98);
+  }
+
+  /* Input focus utilities */
+  .input-focus-effect {
+    transition: box-shadow 150ms cubic-bezier(0.4, 0.0, 0.2, 1);
+  }
+  
+  .input-focus-effect:focus {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.5);
+  }
+
+  /* Loading state utilities */
+  .loading-state {
+    opacity: 0.7;
+    pointer-events: none;
+  }
+
+  /* Success state utilities */
+  .success-pulse {
+    animation: successPulse 0.3s ease-in-out;
+  }
+
+  @keyframes successPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+
+  /* Error state utilities */
+  .error-shake {
+    animation: errorShake 0.3s ease-in-out;
+  }
+
+  @keyframes errorShake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-5px); }
+    40%, 80% { transform: translateX(5px); }
+  }
+
+  /* Progress bar utilities */
+  .progress-fill {
+    transition: width 0.3s ease;
+  }
+
+  /* Animation utilities based on interaction specifications */
+  .animate-bounce-slow {
+    animation: bounce-slow 1.4s infinite;
+  }
+
+  .animate-pulse-slow {
+    animation: pulse-slow 2s infinite;
+  }
+
+  .animate-scale-in {
+    animation: scale-in 0.2s ease-out;
+  }
+
+  .animate-slide-in-up {
+    animation: slide-in-up 0.2s ease-out;
+  }
+}
+
+/* 
+ * Animation Keyframes
+ * These define the actual motion paths for our transitions.
+ */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(1rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    transform: translateY(-1rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulseGentle {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+/* 
+ * Additional Animation Keyframes from Interaction Specifications
+ */
+@keyframes bounce-slow {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes scale-in {
+  0% { transform: scale(0.95); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slide-in-up {
+  0% { transform: translateY(1rem); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes errorShake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+
+@keyframes successPulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* 
+ * Mobile-specific optimizations
+ */
+@media (max-width: 768px) {
+  /* 
+   * Adjust base font size for better mobile readability.
+   * This cascades through all rem-based measurements.
+   */
+  html {
+    font-size: 14px;
+  }
+
+  /* 
+   * Prevent text inflation on iOS devices.
+   */
+  body {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* 
+   * Optimize input fields for mobile.
+   */
+  input,
+  textarea,
+  select {
+    font-size: 16px; /* Prevents zoom on iOS when focusing */
+  }
+
+  /* 
+   * Ensure modals and dialogs are mobile-friendly.
+   */
+  [role="dialog"],
+  [role="alertdialog"] {
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  /* 
+   * Mobile scrollbar - make thinner for better space usage
+   */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  *::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+}
+
+/* 
+ * Tablet-specific adjustments
+ */
+@media (min-width: 768px) and (max-width: 1024px) {
+  html {
+    font-size: 15px;
+  }
+}
+
+/* 
+ * Custom Scrollbar Styles
+ */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}
+
+/* Apply to all scrollable areas */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.3) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.3);
+  border-radius: 10px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.5);
+}

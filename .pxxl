@@ -1,0 +1,31 @@
+# Pxxl Configuration for RAG BOOK
+# This file helps Pxxl understand how to build and deploy your app
+
+# Build configuration
+build_command: "npm run build"
+output_directory: "dist"
+
+# Environment variables that need to be set
+required_env_vars:
+  - VITE_SUPABASE_URL
+  - VITE_SUPABASE_ANON_KEY
+
+# Optional environment variables
+optional_env_vars:
+  - VITE_SUPABASE_SERVICE_ROLE_KEY
+  - VITE_APP_NAME
+  - VITE_APP_VERSION
+  - VITE_APP_DESCRIPTION
+  - VITE_VECTOR_DIMENSIONS
+  - VITE_SIMILARITY_THRESHOLD
+  - VITE_MAX_MATCH_COUNT
+  - VITE_MAX_FILE_SIZE_MB
+  - VITE_SUPPORTED_FILE_TYPES
+  - VITE_MAX_CONVERSATION_HISTORY
+  - VITE_RATE_LIMIT_PER_MINUTE
+
+# Node.js version
+node_version: "18"
+
+# Install command - use standard npm install
+install_command: "npm install"
