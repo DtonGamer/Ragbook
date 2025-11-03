@@ -3,6 +3,7 @@ import { Bot, Brain, Check, ChevronDown, ChevronUp, Copy, Eye, User } from "luci
 import { memo, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { UserFeedback } from "./UserFeedback";
+import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -265,7 +266,7 @@ export const ChatMessage = memo(({
       )}
       <div className={`flex-1 max-w-[80%] ${isUser ? 'flex justify-end' : ''}`}>
         <div className={cn(
-          'rounded-2xl px-4 sm:px-5 py-3 sm:py-4 transition-smooth',
+          'rounded-2xl px-5 sm:px-6 py-4 sm:py-5 transition-smooth',
           isUser 
             ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/20' 
             : 'bg-card text-card-foreground border border-border/50 shadow-sm',
@@ -273,16 +274,24 @@ export const ChatMessage = memo(({
           isStreaming && 'animate-pulse'
         )}>
           <div className="flex items-start justify-between gap-2">
-            <div className="flex-1">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{content}</p>
-              
-              {/* Streaming indicator dots */}
-              {isStreaming && (
-                <div className="flex gap-1 mt-2">
-                  <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                </div>
+            <div className="flex-1 prose prose-sm dark:prose-invert max-w-none">
+              {isUser ? (
+                <p className="text-[15px] leading-[1.7] whitespace-pre-wrap break-words tracking-wide m-0">{content}</p>
+              ) : (
+                <ReactMarkdown
+                  components={{
+                    div: ({children}) => <div className="text-[15px] leading-[1.7] tracking-wide">{children}</div>,
+                    p: ({children}) => <p className="mb-4 last:mb-0">{children}</p>,
+                    strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
+                    ul: ({children}) => <ul className="my-3 ml-4 list-disc space-y-2">{children}</ul>,
+                    ol: ({children}) => <ol className="my-3 ml-4 list-decimal space-y-2">{children}</ol>,
+                    li: ({children}) => <li className="leading-[1.7]">{children}</li>,
+                    code: ({children}) => <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>,
+                    pre: ({children}) => <pre className="bg-muted p-3 rounded-lg overflow-x-auto my-3">{children}</pre>,
+                  }}
+                >
+                  {content}
+                </ReactMarkdown>
               )}
             </div>
             {!isUser && (
@@ -299,6 +308,14 @@ export const ChatMessage = memo(({
               </button>
             )}
           </div>
+          {/* Streaming indicator dots */}
+          {isStreaming && (
+            <div className="flex gap-1 mt-2">
+              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          )}
           {/* Global details toggle (wraps Sources, Decision Factors, System State, Feedback) */}
           {!isUser && (sources?.length || decisionFactors || systemState || (messageId && userId)) && (
             <div className="mt-4 pt-4 border-t border-border/50">

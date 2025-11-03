@@ -182,16 +182,17 @@ async function generateQueryEmbedding(queryText) {
   if (!HUGGINGFACE_API_KEY) {
     throw new Error('HUGGINGFACE_API_KEY not configured');
   }
-  const response = await fetch('https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2', {
+  // ✅ Use a model that's explicitly designed for embeddings
+  const apiUrl = 'https://api-inference.huggingface.co/models/BAAI/bge-small-en-v1.5';
+  console.log('🌐 Calling HuggingFace API:', apiUrl);
+  const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${HUGGINGFACE_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      inputs: [
-        queryText
-      ],
+      inputs: queryText,
       options: {
         wait_for_model: true
       }
@@ -201,28 +202,18 @@ async function generateQueryEmbedding(queryText) {
     const errorText = await response.text();
     throw new Error(`HuggingFace API error: ${response.status} - ${errorText}`);
   }
-  const result = await response.json();
-  // Handle different response formats
-  let embedding;
-  if (Array.isArray(result) && Array.isArray(result[0])) {
-    // Response is [[embedding]]
-    embedding = result[0];
-  } else if (Array.isArray(result)) {
-    // Response is [embedding]
-    embedding = result;
-  } else {
-    throw new Error('Unexpected embedding response format');
-  }
-  if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIMENSIONS) {
-    throw new Error(`Invalid embedding response. Expected ${EMBEDDING_DIMENSIONS} dimensions, got ${embedding?.length || 0}`);
-  }
-  return embedding;
+  const embedding = await response.json();
+  // This model returns embeddings in a predictable format
+  return Array.isArray(embedding[0]) ? embedding[0] : embedding;
 }
 // ============================================================================
-// SMART QUERY ANALYSIS
+// SMART QUERY ANALYSIS (IMPROVED)
 // ============================================================================
-function analyzeQuery(message, userState) {
+async function analyzeQuery(message, userState, supabase, userId) {
   const lowerMessage = message.toLowerCase().trim();
+  console.log('🔍 === ANALYZING QUERY ===');
+  console.log('Message:', message);
+  console.log('User ID:', userId);
   // Document list request
   const listKeywords = [
     'list my files',
@@ -234,6 +225,7 @@ function analyzeQuery(message, userState) {
     'my uploaded files'
   ];
   if (listKeywords.some((phrase)=>lowerMessage.includes(phrase))) {
+    console.log('✅ Detected: DOCUMENT_LIST request');
     return {
       type: 'document_list',
       confidence: 0.95,
@@ -243,26 +235,32 @@ function analyzeQuery(message, userState) {
       needsEmbedding: false
     };
   }
-  // Document search request
+  // Document search request - EXPLICIT KEYWORDS
   const searchKeywords = [
+    'my document',
+    'my pdf',
+    'my file',
+    'in my document',
+    'from my document',
+    'according to my',
     'search my documents',
     'search my files',
     'find in my documents',
     'look in my files',
-    'check my documents for',
-    'search uploaded'
+    'check my documents for'
   ];
   if (searchKeywords.some((phrase)=>lowerMessage.includes(phrase))) {
+    console.log('✅ Detected: EXPLICIT DOCUMENT_SEARCH request');
     return {
       type: 'document_search',
-      confidence: 0.9,
-      reasoning: 'User explicitly asked to search documents',
+      confidence: 0.95,
+      reasoning: 'User explicitly mentioned their documents',
       alternatives: [],
       userIntent: 'search_documents',
       needsEmbedding: true
     };
   }
-  // Check for question indicators (might need RAG)
+  // Check for question indicators
   const questionWords = [
     'what',
     'how',
@@ -275,14 +273,23 @@ function analyzeQuery(message, userState) {
     'describe'
   ];
   const hasQuestionWord = questionWords.some((word)=>lowerMessage.includes(word));
-  // Check user's document usage patterns
-  const hasDocuments = userState?.preferences?.has_documents || false;
-  const prefersDocSearch = userState?.intent_patterns?.search_documents > 5;
-  if (hasQuestionWord && (hasDocuments || prefersDocSearch)) {
+  console.log('Has question word:', hasQuestionWord);
+  // ✨ CHECK DATABASE DIRECTLY for completed documents
+  let hasCompletedDocuments = false;
+  try {
+    const { data: docs, error } = await supabase.from('documents').select('id').eq('user_id', userId).eq('status', 'completed').limit(1);
+    hasCompletedDocuments = !error && docs && docs.length > 0;
+    console.log(`📊 User has completed documents: ${hasCompletedDocuments}`);
+  } catch (e) {
+    console.error('Error checking documents:', e);
+  }
+  // If user has documents AND asks a question, try RAG
+  if (hasQuestionWord && hasCompletedDocuments) {
+    console.log('✅ Detected: HYBRID_SEARCH (question + has documents)');
     return {
       type: 'hybrid_search',
-      confidence: 0.75,
-      reasoning: 'Question detected with document history - trying RAG first',
+      confidence: 0.85,
+      reasoning: 'Question detected and user has uploaded documents - trying RAG first',
       alternatives: [
         'general_chat'
       ],
@@ -291,6 +298,7 @@ function analyzeQuery(message, userState) {
     };
   }
   // General chat
+  console.log('✅ Detected: GENERAL_CHAT');
   return {
     type: 'general_chat',
     confidence: 0.9,
@@ -304,10 +312,8 @@ function analyzeQuery(message, userState) {
 // CREDIT MANAGEMENT
 // ============================================================================
 async function checkAndDecrementCredits(supabase, userId) {
-  // Get user subscription
   const { data: subscription, error: subError } = await supabase.from('user_subscriptions').select('plan, credits_remaining, credits_max').eq('user_id', userId).single();
   if (subError || !subscription) {
-    // Create default subscription if doesn't exist
     const { data: newSub } = await supabase.from('user_subscriptions').insert({
       user_id: userId,
       plan: 'free',
@@ -322,7 +328,6 @@ async function checkAndDecrementCredits(supabase, userId) {
     };
   }
   const { plan, credits_remaining } = subscription;
-  // Pro users have unlimited credits (check against 1000 max)
   if (plan === 'pro') {
     if (credits_remaining <= 0) {
       return {
@@ -332,7 +337,6 @@ async function checkAndDecrementCredits(supabase, userId) {
         message: 'Pro plan credits exhausted. Please contact support.'
       };
     }
-    // Decrement pro credits
     await supabase.from('user_subscriptions').update({
       credits_remaining: credits_remaining - 1,
       updated_at: new Date().toISOString()
@@ -343,7 +347,6 @@ async function checkAndDecrementCredits(supabase, userId) {
       plan: 'pro'
     };
   }
-  // Free users have limited credits
   if (credits_remaining <= 0) {
     return {
       success: false,
@@ -352,7 +355,6 @@ async function checkAndDecrementCredits(supabase, userId) {
       message: 'You have run out of credits. Please upgrade to Pro for 1000 credits.'
     };
   }
-  // Decrement free credits
   await supabase.from('user_subscriptions').update({
     credits_remaining: credits_remaining - 1,
     updated_at: new Date().toISOString()
@@ -413,9 +415,14 @@ function addRateLimitHeaders(response, rateLimitInfo) {
 // GENERAL CHAT HELPER
 // ============================================================================
 async function generateGeneralChatResponse(message, conversationHistory) {
+  console.log('🔵 === GENERAL CHAT FUNCTION CALLED ===');
+  console.log('📝 Message:', message);
+  console.log('📜 Conversation History Length:', conversationHistory?.length || 0);
   try {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    console.log('🔑 GEMINI_API_KEY exists:', !!GEMINI_API_KEY);
     if (!GEMINI_API_KEY) {
+      console.error('❌ GEMINI_API_KEY not configured');
       throw new Error('GEMINI_API_KEY not configured');
     }
     const systemPrompt = `You are a friendly, intelligent study companion and conversational AI. Your name is RAG Book.
@@ -437,36 +444,50 @@ ${conversationHistory || 'No previous messages'}
 User's latest message: "${message}"
 
 Respond naturally and conversationally. Keep responses focused but friendly. If it's a greeting, greet back. If it's a question, answer it. If it's just chat, chat back!`;
-    const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`, {
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: systemPrompt
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.9,
+        topK: 40,
+        topP: 0.95,
+        maxOutputTokens: 1024
+      }
+    };
+    console.log('🚀 Sending request to Gemini API...');
+    const aiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              {
-                text: systemPrompt
-              }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.9,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 1024
-        }
-      })
+      body: JSON.stringify(requestBody)
     });
+    console.log('📡 Response Status:', aiResponse.status);
     if (!aiResponse.ok) {
-      throw new Error(`AI service error: ${aiResponse.status}`);
+      const errorText = await aiResponse.text();
+      console.error('❌ Gemini API Error Response:', errorText);
+      throw new Error(`AI service error: ${aiResponse.status} - ${errorText}`);
     }
     const aiData = await aiResponse.json();
-    return aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Hey! I'm here to chat. What's on your mind?";
+    console.log('✅ Gemini Response Data:', JSON.stringify(aiData, null, 2));
+    const responseText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Hey! I'm here to chat. What's on your mind?";
+    console.log('💬 Final Response Text:', responseText.substring(0, 200));
+    console.log('🔵 === GENERAL CHAT FUNCTION COMPLETED ===');
+    return responseText;
   } catch (error) {
-    console.error('General chat error:', error);
+    console.error('❌ === GENERAL CHAT ERROR ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('❌ === END GENERAL CHAT ERROR ===');
     return "Hey! I'm having a bit of trouble right now, but I'm here to chat. Try asking me again?";
   }
 }
@@ -550,9 +571,7 @@ async function handleRequest(req) {
         }
       });
     }
-    // ========================================================================
-    // CHECK & DECREMENT CREDITS
-    // ========================================================================
+    // Check & decrement credits
     const creditResult = await checkAndDecrementCredits(supabase, user.id);
     if (!creditResult.success) {
       return new Response(JSON.stringify({
@@ -591,7 +610,7 @@ async function handleRequest(req) {
       role: 'user',
       content: sanitizedMessage
     });
-    // Get user state using RPC
+    // Get user state
     const { data: userState } = await supabase.rpc('get_or_create_user_state', {
       target_user_id: user.id
     });
@@ -600,9 +619,8 @@ async function handleRequest(req) {
       ascending: false
     }).limit(10);
     const conversationHistory = (recentMessages || []).reverse().map((msg)=>`${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n\n');
-    // Analyze query with smart routing
-    const queryAnalysis = analyzeQuery(sanitizedMessage, userState);
-    // Check if should yield control
+    // Analyze query (NOW PASSING SUPABASE AND USER.ID)
+    const queryAnalysis = await analyzeQuery(sanitizedMessage, userState, supabase, user.id);
     const { data: shouldYield } = await supabase.rpc('should_yield_control', {
       target_user_id: user.id
     });
@@ -618,11 +636,11 @@ async function handleRequest(req) {
       userTrustLevel: userState?.trust_level || 0.5,
       needsEmbedding: queryAnalysis.needsEmbedding
     };
+    console.log('🎯 Query Analysis Result:', JSON.stringify(queryAnalysis, null, 2));
     // ========================================================================
     // SMART ROUTING: GENERATE RESPONSE BASED ON QUERY TYPE
     // ========================================================================
     if (shouldYield && queryAnalysis.confidence < 0.7) {
-      // System is uncertain - ask for clarification
       responseContent = `I sense you might be looking for something specific, but I'm not entirely sure what you need. Could you help me understand better? 
 
 I can help you with:
@@ -632,64 +650,72 @@ I can help you with:
 
 What would be most helpful for you right now?`;
     } else if (queryAnalysis.type === 'document_list') {
-      // List documents (no embedding needed)
-      const { data: documents, error: docError } = await supabase.from('documents').select('id, original_name, created_at, file_size, status, user_id, chunk_count').eq('user_id', user.id).order('created_at', {
+      console.log('📋 Processing DOCUMENT_LIST request');
+      // List documents
+      const { data: documents } = await supabase.from('documents').select('id, original_name, created_at, file_size, status, user_id, chunk_count').eq('user_id', user.id).order('created_at', {
         ascending: false
       });
-      if (docError) {
-        console.error('Document list error:', docError);
-      }
       if (!documents || documents.length === 0) {
         responseContent = "You haven't uploaded any documents yet. You can upload documents from the Documents page to get started.";
       } else {
         const formatStatus = (doc)=>{
-          if (doc.status === 'completed') {
-            return `✅ Ready (${doc.chunk_count || 0} chunks)`;
-          } else if (doc.status === 'processing') {
-            return `⏳ Processing`;
-          } else if (doc.status === 'failed') {
-            return `❌ Failed`;
-          } else {
-            return `📤 ${doc.status}`;
-          }
+          if (doc.status === 'completed') return `✅ Ready (${doc.chunk_count || 0} chunks)`;
+          if (doc.status === 'processing') return `⏳ Processing`;
+          if (doc.status === 'failed') return `❌ Failed`;
+          return `📤 ${doc.status}`;
         };
         const docList = documents.map((doc)=>`• **${doc.original_name}** - ${formatStatus(doc)}\n  Uploaded: ${new Date(doc.created_at).toLocaleDateString()}`).join('\n\n');
         const completedCount = documents.filter((d)=>d.status === 'completed').length;
         responseContent = `Here are your uploaded documents:\n\n${docList}\n\n---\n\n**Summary:** ${completedCount} of ${documents.length} documents ready to search.\n\nYou can ask me to search through your completed documents for specific information.`;
       }
     } else if (queryAnalysis.needsEmbedding) {
-      // Document search or hybrid search (needs embedding)
+      console.log('🔍 Processing DOCUMENT_SEARCH or HYBRID_SEARCH request');
+      // Document search or hybrid search
       try {
-        console.log('Generating query embedding with HuggingFace...');
+        console.log('🔮 Generating query embedding with HuggingFace...');
         const queryEmbedding = await generateQueryEmbedding(sanitizedMessage);
-        // Search using match_documents RPC
+        console.log('✅ Query embedding generated successfully, dimensions:', queryEmbedding.length);
+        console.log('🔍 Calling match_documents RPC function...');
+        console.log('   - match_threshold: 0.65');
+        console.log('   - match_count: 5');
+        console.log('   - user_id:', user.id);
         const { data: chunks, error: searchError } = await supabase.rpc('match_documents', {
           query_embedding: queryEmbedding,
           match_threshold: 0.65,
           match_count: 5,
           p_user_id: user.id
         });
+        console.log('📊 RPC Response:');
+        console.log('   - Error:', searchError ? searchError.message : 'None');
+        console.log('   - Chunks found:', chunks?.length || 0);
         if (searchError) {
           await logToSecurityLog(supabase, 3, 'Knowledge base search failed', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
             error: searchError.message
           });
-          // Fallback to general chat
           if (queryAnalysis.type === 'hybrid_search') {
+            console.log('⚠️ Search failed, falling back to general chat');
             responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
           } else {
             responseContent = "I'm sorry, I couldn't search your documents at the moment. Please try again later.";
           }
         } else if (!chunks || chunks.length === 0) {
-          // No results found
+          console.log('⚠️ No chunks found');
           if (queryAnalysis.type === 'hybrid_search') {
-            // Fallback to general chat for hybrid queries
+            console.log('Falling back to general chat (no chunks)');
             responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
           } else {
             responseContent = "I couldn't find any relevant information in your documents for that query. Try rephrasing your question or check if you have uploaded the relevant documents.";
           }
         } else {
-          // Found relevant chunks - generate RAG response
-          const context = chunks.map((chunk)=>chunk.content).join('\n\n');
+          console.log(`✅ Found ${chunks.length} relevant chunks`);
+          // ====================================================================
+          // IMPROVED RAG RESPONSE GENERATION
+          // ====================================================================
+          const context = chunks.map((chunk, idx)=>`[Source ${idx + 1}: ${chunk.document_title}, Chunk ${chunk.chunk_index}, Similarity: ${Math.round(chunk.similarity * 100)}%]\n${chunk.content}`).join('\n\n---\n\n');
+          console.log('📚 CONTEXT BEING SENT TO GEMINI:');
+          console.log('Context length:', context.length);
+          console.log('Number of sources:', chunks.length);
+          console.log('First 200 chars:', context.substring(0, 200));
           sources = chunks.map((chunk)=>({
               document_id: chunk.document_id,
               document_title: chunk.document_title,
@@ -702,7 +728,7 @@ What would be most helpful for you right now?`;
             if (!GEMINI_API_KEY) {
               throw new Error('GEMINI_API_KEY not configured');
             }
-            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${GEMINI_API_KEY}`, {
+            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
@@ -712,34 +738,44 @@ What would be most helpful for you right now?`;
                   {
                     parts: [
                       {
-                        text: `Based on the following context from the user's documents, please provide a helpful and accurate response to their question: "${sanitizedMessage}"
+                        text: `You are a RAG (Retrieval Augmented Generation) assistant. Answer STRICTLY based on the context below.
 
-Context from documents:
+USER'S QUESTION:
+"${sanitizedMessage}"
+
+RETRIEVED CONTEXT FROM USER'S DOCUMENTS:
 ${context}
 
-Instructions:
-- Provide a clear, helpful response based on the context
-- If the context doesn't contain enough information to fully answer the question, say so
-- Cite which documents the information comes from when relevant
-- Be conversational and natural in your response`
+INSTRUCTIONS:
+- Answer using ONLY the context above
+- If the answer is not in the context, say "I don't see information about that in your documents"
+- Quote specific parts when answering
+- Mention document names when citing information
+- Do NOT use external knowledge
+
+Answer:`
                       }
                     ]
                   }
                 ],
                 generationConfig: {
-                  temperature: 0.7,
-                  topK: 40,
-                  topP: 0.95,
-                  maxOutputTokens: 1024
+                  temperature: 0.2,
+                  topK: 10,
+                  topP: 0.8,
+                  maxOutputTokens: 800
                 }
               })
             });
             if (!aiResponse.ok) {
+              const errorBody = await aiResponse.text();
+              console.error('Gemini API error:', aiResponse.status, errorBody);
               throw new Error(`AI service error: ${aiResponse.status}`);
             }
             const aiData = await aiResponse.json();
-            responseContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "I'm sorry, I couldn't generate a response at the moment.";
+            responseContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again.";
+            console.log('✅ Gemini response generated:', responseContent.substring(0, 100));
           } catch (aiError) {
+            console.error('AI generation error:', aiError);
             await logToSecurityLog(supabase, 3, 'AI service error for document search', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
               error: String(aiError)
             });
@@ -747,14 +783,15 @@ Instructions:
           }
         }
       } catch (embeddingError) {
+        console.error('Embedding generation error:', embeddingError);
         await logToSecurityLog(supabase, 3, 'Embedding generation failed', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
           error: String(embeddingError)
         });
-        // Fallback to general chat
         responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
       }
     } else {
-      // General chat (no embedding needed)
+      console.log('💬 Processing GENERAL_CHAT request');
+      // General chat
       responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
     }
     // ========================================================================
@@ -779,7 +816,7 @@ Instructions:
         }
       }
     }).select().single();
-    // Log decision using RPC
+    // Log decision
     if (savedMessage) {
       await supabase.rpc('log_decision', {
         target_user_id: user.id,
@@ -791,7 +828,7 @@ Instructions:
         reasoning: queryAnalysis.reasoning
       });
     }
-    // Update user state using RPC
+    // Update user state
     await supabase.rpc('update_user_state', {
       target_user_id: user.id,
       interaction_data: {
@@ -842,6 +879,7 @@ Instructions:
     });
     return addSecurityHeaders(response);
   } catch (error) {
+    console.error('❌ Unexpected error in handler:', error);
     await logToSecurityLog(supabase, 4, 'Unexpected error in rag-chat handler', 'rag-chat', userInfo.userId || null, null, requestId, userInfo.ip, userInfo.userAgent, null, {
       error: String(error),
       stack: error.stack
