@@ -30,20 +30,6 @@ interface Message {
   sources?: any[];
   messageId?: string;
   userId?: string;
-  decisionFactors?: {
-    queryType: string;
-    confidence: number;
-    reasoning: string;
-    alternatives: string[];
-    userIntent?: string;
-    shouldYield: boolean;
-    userTrustLevel: number;
-  };
-  systemState?: {
-    userTrustLevel: number;
-    lastUpdated: string;
-    learningPoints: string[];
-  };
 }
 
 const Chat = () => {
@@ -122,7 +108,8 @@ const Chat = () => {
     } catch (e) {
       console.error("Initial cache check error:", e);
     }
-    return true; // Default to true if we don't have cached messages
+    // Changed default from true to false to show welcome options instead of loading state
+    return false; // Show welcome options instead of loading spinner
   });
 
   // Deduplicate messages by id or fallback to content+role+userId signature
@@ -167,21 +154,17 @@ const Chat = () => {
       return;
     }
 
-    // Set navigation loading state only if we need to actually load
+    // If there's a previous conversation ID and no messages yet, show welcome options
+    // and set the conversation ID for when the user chooses to load it
     if (lastId && messages.length === 0) {
       setIsNavigatingToChat(true);
-    }
-
-    if (lastId && lastId !== conversationId) {
-      console.log("📂 Loading last conversation:", lastId);
-      loadConversation(lastId, false);
+      setConversationId(lastId);
     } else if (!conversationId && !isLoadingConversation && !loadingRef.current) {
       console.log("🆕 No conversation found, creating new one");
       setIsNavigatingToChat(false);
       loadOrCreateConversation();
     } else if (conversationId && messages.length === 0 && !isLoadingConversation) {
-      console.log("🔄 Navigating back to existing conversation:", conversationId);
-      loadConversation(conversationId, false);
+      setIsNavigatingToChat(true);
     } else {
       setIsNavigatingToChat(false);
     }
@@ -387,8 +370,6 @@ const Chat = () => {
         role: msg.role as "user" | "assistant",
         content: msg.content,
         sources: (msg.metadata as { sources?: any[] })?.sources || [],
-        decisionFactors: (msg.metadata as { decisionFactors?: any })?.decisionFactors,
-        systemState: (msg.metadata as { systemState?: any })?.systemState,
         messageId: msg.id,
         userId: user?.id
       }));
@@ -559,8 +540,6 @@ const Chat = () => {
           role: "assistant", 
           content: responseData.message || "No response received", 
           sources: responseData.sources || [],
-          decisionFactors: responseData.decisionFactors,
-          systemState: responseData.systemState,
           messageId: tempAssistantMessageId,
           userId: user.id
         };
@@ -573,8 +552,6 @@ const Chat = () => {
           role: msg.role as "user" | "assistant",
           content: msg.content,
           sources: (msg.metadata as { sources?: any[] })?.sources || [],
-          decisionFactors: (msg.metadata as { decisionFactors?: any })?.decisionFactors,
-          systemState: (msg.metadata as { systemState?: any })?.systemState,
           messageId: msg.id,
           userId: user?.id
         }));
@@ -735,13 +712,35 @@ const Chat = () => {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto pb-36 md:pb-32 custom-scrollbar">
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-8">
-            {/* Show loading state when navigating back to chat with existing conversation */}
+            {/* Show welcome options when navigating to chat with existing conversation */}
             {(isNavigatingToChat && conversationId && messages.length === 0) ? (
-              <LoadingState 
-                isLoading={true} 
-                message="Loading your conversation..." 
-                size="lg"
-              />
+              <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="text-center">
+                  <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center shadow-glow">
+                    <Bot className="w-10 h-10 text-primary" />
+                  </div>
+                  <h2 className="text-3xl font-bold mb-3 text-foreground">Welcome Back!</h2>
+                  <p className="text-muted-foreground text-lg max-w-md mx-auto mb-6">
+                    We found your previous conversation. What would you like to do?
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                    <Button 
+                      onClick={() => loadConversation(conversationId)}
+                      className="transition-smooth hover:scale-102 active:scale-98 min-w-[200px] bg-primary hover:bg-primary/90"
+                    >
+                      <span>Continue Previous Conversation</span>
+                    </Button>
+                    <Button 
+                      onClick={handleNewConversation}
+                      variant="outline"
+                      className="transition-smooth hover:scale-102 active:scale-98 min-w-[200px]"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Start New Conversation
+                    </Button>
+                  </div>
+                </div>
+              </div>
             ) : (
               <>
                 {messages.length === 0 && !isNavigatingToChat && (
@@ -813,7 +812,9 @@ const Chat = () => {
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-4">
             <ChatInput onSend={handleSendMessage} disabled={isLoading || isNavigatingToChat} />
             <p className="text-xs text-muted-foreground text-center mt-2">
-              Press Enter to send, Shift+Enter for new line
+              {isNavigatingToChat && conversationId && messages.length === 0 
+                ? "Select an option above to continue" 
+                : "Press Enter to send, Shift+Enter for new line"}
             </p>
           </div>
         </div>

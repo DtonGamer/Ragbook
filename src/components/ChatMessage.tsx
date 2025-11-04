@@ -20,20 +20,6 @@ interface ChatMessageProps {
   isStreaming?: boolean;
   messageId?: string;
   userId?: string;
-  decisionFactors?: {
-    queryType: string;
-    confidence: number;
-    reasoning: string;
-    alternatives: string[];
-    userIntent?: string;
-    shouldYield: boolean;
-    userTrustLevel: number;
-  };
-  systemState?: {
-    userTrustLevel: number;
-    lastUpdated: string;
-    learningPoints: string[];
-  };
 }
 
 export const ChatMessage = memo(({ 
@@ -43,16 +29,12 @@ export const ChatMessage = memo(({
   isNew = false, 
   isStreaming = false, 
   messageId,
-  userId,
-  decisionFactors, 
-  systemState 
+  userId
 }: ChatMessageProps) => {
   const isUser = role === "user";
   const [copied, setCopied] = useState(false);
   const [isVisible, setIsVisible] = useState(!isNew);
   const [showAllDetails, setShowAllDetails] = useState(false);
-  const [showDecisionFactors, setShowDecisionFactors] = useState(false);
-  const [showSystemState, setShowSystemState] = useState(false);
   const messageRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -134,113 +116,7 @@ export const ChatMessage = memo(({
     </div>
   );
 
-  // Memoize the decision factors content
-  const decisionFactorsContent = decisionFactors && (
-    <div>
-      <button
-        onClick={() => setShowDecisionFactors(!showDecisionFactors)}
-        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-      >
-        <Brain className="w-4 h-4" />
-        <span>Why did I respond this way?</span>
-        {showDecisionFactors ? (
-          <ChevronUp className="w-3 h-3" />
-        ) : (
-          <ChevronDown className="w-3 h-3" />
-        )}
-      </button>
-      {showDecisionFactors && (
-        <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-xs mt-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="font-medium text-primary">Query Type:</span>
-              <span className="ml-1 capitalize">{decisionFactors.queryType.replace('_', ' ')}</span>
-            </div>
-            <div>
-              <span className="font-medium text-primary">Confidence:</span>
-              <span className="ml-1">{Math.round(decisionFactors.confidence * 100)}%</span>
-            </div>
-          </div>
-          <div>
-            <span className="font-medium text-primary">Reasoning:</span>
-            <p className="mt-1 text-muted-foreground">{decisionFactors.reasoning}</p>
-          </div>
-          {decisionFactors.alternatives.length > 0 && (
-            <div>
-              <span className="font-medium text-primary">Other options I considered:</span>
-              <ul className="mt-1 list-disc list-inside text-muted-foreground">
-                {decisionFactors.alternatives.map((alt, idx) => (
-                  <li key={idx}>{alt}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {decisionFactors.shouldYield && (
-            <div className="bg-yellow-500/10 border border-yellow-500/20 rounded p-2">
-              <span className="font-medium text-yellow-600">System yielded control</span>
-              <p className="text-yellow-600/80 text-xs mt-1">
-                I sensed uncertainty and asked for clarification rather than guessing.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 
-  // Memoize the system state content
-  const systemStateContent = systemState && (
-    <div>
-      <button
-        onClick={() => setShowSystemState(!showSystemState)}
-        className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors group"
-      >
-        <Eye className="w-4 h-4" />
-        <span>System state & learning</span>
-        {showSystemState ? (
-          <ChevronUp className="w-3 h-3" />
-        ) : (
-          <ChevronDown className="w-3 h-3" />
-        )}
-      </button>
-      {showSystemState && (
-        <div className="bg-muted/30 rounded-lg p-3 space-y-2 text-xs mt-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <span className="font-medium text-primary">Your Trust Level:</span>
-              <div className="mt-1 flex items-center gap-2">
-                <div className="flex-1 bg-muted rounded-full h-2">
-                  <div 
-                    className="bg-primary h-2 rounded-full transition-all duration-300"
-                    style={{ width: `${systemState.userTrustLevel * 100}%` }}
-                  />
-                </div>
-                <span className="text-muted-foreground">
-                  {Math.round(systemState.userTrustLevel * 100)}%
-                </span>
-              </div>
-            </div>
-            <div>
-              <span className="font-medium text-primary">Last Updated:</span>
-              <p className="text-muted-foreground">
-                {new Date(systemState.lastUpdated).toLocaleTimeString()}
-              </p>
-            </div>
-          </div>
-          {systemState.learningPoints.length > 0 && (
-            <div>
-              <span className="font-medium text-primary">What I'm learning:</span>
-              <ul className="mt-1 list-disc list-inside text-muted-foreground">
-                {systemState.learningPoints.map((point, idx) => (
-                  <li key={idx}>{point}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 
   return (
     <div 
@@ -316,8 +192,8 @@ export const ChatMessage = memo(({
               <span className="w-2 h-2 bg-current rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
             </div>
           )}
-          {/* Global details toggle (wraps Sources, Decision Factors, System State, Feedback) */}
-          {!isUser && (sources?.length || decisionFactors || systemState || (messageId && userId)) && (
+          {/* Global details toggle (wraps Sources and Feedback) */}
+          {!isUser && (sources?.length || (messageId && userId)) && (
             <div className="mt-4 pt-4 border-t border-border/50">
               <button
                 onClick={() => setShowAllDetails(!showAllDetails)}
@@ -335,8 +211,6 @@ export const ChatMessage = memo(({
               {showAllDetails && (
                 <div className="mt-3 space-y-4">
                   {sourcesContent}
-                  {decisionFactorsContent}
-                  {systemStateContent}
                   {/* User Feedback */}
                   {messageId && userId && (
                     <div className="pt-2 border-t border-border/50">

@@ -626,16 +626,6 @@ async function handleRequest(req) {
     });
     let responseContent = '';
     let sources = [];
-    let decisionFactors = {
-      queryType: queryAnalysis.type,
-      confidence: queryAnalysis.confidence,
-      reasoning: queryAnalysis.reasoning,
-      alternatives: queryAnalysis.alternatives,
-      userIntent: queryAnalysis.userIntent,
-      shouldYield: shouldYield || false,
-      userTrustLevel: userState?.trust_level || 0.5,
-      needsEmbedding: queryAnalysis.needsEmbedding
-    };
     console.log('🎯 Query Analysis Result:', JSON.stringify(queryAnalysis, null, 2));
     // ========================================================================
     // SMART ROUTING: GENERATE RESPONSE BASED ON QUERY TYPE
@@ -860,16 +850,7 @@ Answer:`
       sources: sources,
       conversationId: conversationId,
       credits: creditResult.remaining,
-      plan: creditResult.plan,
-      decisionFactors: decisionFactors,
-      systemState: {
-        userTrustLevel: userState?.trust_level || 0.5,
-        lastUpdated: new Date().toISOString(),
-        learningPoints: [
-          `User prefers ${queryAnalysis.type} queries`,
-          `Confidence level: ${Math.round(queryAnalysis.confidence * 100)}%`
-        ]
-      }
+      plan: creditResult.plan
     }), {
       status: 200,
       headers: {
