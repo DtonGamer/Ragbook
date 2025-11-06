@@ -21,7 +21,7 @@ import {
   Search,
   Trash2
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 interface Conversation {
@@ -69,37 +69,69 @@ export const ConversationSidebar = ({
   }, [refreshTrigger]);
 
   const loadConversations = async () => {
+    setIsLoading(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
 
-      const { data, error } = await supabase
+      // First, get all conversations for the user
+      const { data: conversationsData, error: conversationsError } = await supabase
         .from("conversations")
-        .select(`
-          id,
-          title,
-          created_at,
-          updated_at,
-          messages(count)
-        `)
+        .select("id, title, created_at, updated_at")
         .eq("user_id", session.user.id)
         .order("updated_at", { ascending: false });
 
-      if (error) {
-        console.error("Error loading conversations:", error);
+      if (conversationsError) {
+        console.error("Error loading conversations:", conversationsError);
         toast.error("Failed to load conversations");
         return;
       }
 
-      const conversationsWithCount = data.map(conv => ({
-        id: conv.id,
-        title: conv.title || "New Conversation",
-        created_at: conv.created_at,
-        updated_at: conv.updated_at,
-        message_count: conv.messages?.[0]?.count || 0
-      }));
+      // If there are conversations, get message counts for all of them in a single query
+      if (conversationsData && conversationsData.length > 0) {
+        const conversationIds = conversationsData.map(conv => conv.id);
+        
+        const { data: messageCountsData, error: countsError } = await supabase
+          .from("messages")
+          .select("conversation_id")
+          .in("conversation_id", conversationIds);
 
-      setConversations(conversationsWithCount);
+        if (countsError) {
+          console.error("Error loading message counts:", countsError);
+          // Continue with conversations even if counts fail, ensuring titles are handled
+          const conversationsWithZeroCounts = conversationsData.map(conv => ({
+            ...conv,
+            title: conv.title || "New Conversation", // Ensure title is never empty
+            message_count: 0
+          }));
+          setConversations(conversationsWithZeroCounts);
+        } else {
+          // Count messages per conversation
+          const countsMap = new Map();
+          
+          // Initialize all conversation IDs with 0
+          conversationIds.forEach(id => {
+            countsMap.set(id, 0);
+          });
+          
+          // Count actual messages for each conversation
+          messageCountsData?.forEach(msg => {
+            countsMap.set(msg.conversation_id, (countsMap.get(msg.conversation_id) || 0) + 1);
+          });
+
+          // Combine conversations with their message counts, ensuring titles are handled
+          const conversationsWithCounts = conversationsData.map(conv => ({
+            ...conv,
+            title: conv.title || "New Conversation", // Ensure title is never empty
+            message_count: countsMap.get(conv.id) || 0
+          }));
+          
+          setConversations(conversationsWithCounts);
+        }
+      } else {
+        // No conversations exist
+        setConversations([]);
+      }
     } catch (error) {
       console.error("Error loading conversations:", error);
       toast.error("Failed to load conversations");
@@ -191,23 +223,32 @@ export const ConversationSidebar = ({
     }
   };
 
-  const filteredConversations = conversations.filter(conv =>
-    conv.title.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  // Memoize the filtered conversations to optimize performance
+  const filteredConversations = useMemo(() => {
+    if (!searchQuery.trim()) return conversations;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return conversations.filter(conv =>
+      conv.title.toLowerCase().includes(query)
+    );
+  }, [conversations, searchQuery]);
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+  // Memoize formatDate function to prevent recreation on every render
+  const formatDate = useMemo(() => {
+    return (dateString: string) => {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
 
-    if (diffInHours < 24) {
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else if (diffInHours < 168) {
-      return date.toLocaleDateString([], { weekday: 'short' });
-    } else {
-      return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    }
-  };
+      if (diffInHours < 24) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } else if (diffInHours < 168) { // 7 days
+        return date.toLocaleDateString([], { weekday: 'short' });
+      } else {
+        return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      }
+    };
+  }, []); // Empty dependency array means this function will only be created once
 
   return (
     <div className={`bg-card flex flex-col h-full transition-all duration-300 overflow-hidden ${className}`}>
@@ -256,7 +297,7 @@ export const ConversationSidebar = ({
       </div>
 
       {/* Conversations List - Scrollable */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
+      <ScrollArea className="flex-1">
         <div className={`space-y-2 ${collapsed ? 'p-2' : 'p-3'}`}>
           {isLoading ? (
             <div className="space-y-2">
@@ -383,7 +424,7 @@ export const ConversationSidebar = ({
             ))
           )}
         </div>
-      </div>
+      </ScrollArea>
 
       <ConfirmationDialog
         open={confirmationState.open}

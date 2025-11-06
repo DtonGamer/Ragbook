@@ -17,8 +17,8 @@ interface UseAuthReturn extends AuthState {
 }
 
 // Session timeout configuration (30 minutes)
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-const REFRESH_THRESHOLD_MS = 5 * 60 * 1000; // Refresh 5 minutes before expiry
+const SESSION_TIMEOUT_MS = 50 * 60 * 1000;
+const REFRESH_THRESHOLD_MS = 10 * 60 * 1000; // Refresh 10 minutes before expiry
 
 export const useAuth = (): UseAuthReturn => {
   const [authState, setAuthState] = useState<AuthState>({
@@ -145,65 +145,7 @@ export const useAuth = (): UseAuthReturn => {
     }
   }, [timeoutId]);
 
-  // Set up session timeout
-  const setupSessionTimeout = useCallback(() => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
 
-    const timeout = setTimeout(async () => {
-      if (authState.session && isSessionExpired(authState.session)) {
-        console.log('Session expired due to inactivity');
-        toast.error('Session expired due to inactivity. Please sign in again.');
-        
-        // Clear timeout
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-          setTimeoutId(null);
-        }
-
-        // Sign out from Supabase
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.error('Sign out error:', error);
-        }
-
-        // Reset state
-        setAuthState({
-          user: null,
-          session: null,
-          loading: false,
-          isAdmin: false,
-        });
-        setLastActivity(Date.now());
-      }
-    }, SESSION_TIMEOUT_MS);
-
-    setTimeoutId(timeout);
-  }, [authState.session, isSessionExpired, timeoutId]);
-
-  // Set up automatic refresh
-  const setupAutoRefresh = useCallback(() => {
-    if (!authState.session) return;
-
-    const refreshInterval = setInterval(async () => {
-      if (!authState.session) {
-        clearInterval(refreshInterval);
-        return;
-      }
-
-      const now = Date.now();
-      const expiresAt = authState.session.expires_at ? authState.session.expires_at * 1000 : now + SESSION_TIMEOUT_MS;
-      const timeUntilExpiry = expiresAt - now;
-
-      // Refresh if session expires within the threshold
-      if (timeUntilExpiry <= REFRESH_THRESHOLD_MS) {
-        await refreshSession();
-      }
-    }, 60000); // Check every minute
-
-    return () => clearInterval(refreshInterval);
-  }, [authState.session, refreshSession]);
 
   // Initialize auth state
   useEffect(() => {
@@ -281,17 +223,57 @@ export const useAuth = (): UseAuthReturn => {
 
   // Set up session management when session changes
   useEffect(() => {
-    if (authState.session) {
-      setupSessionTimeout();
-      const cleanup = setupAutoRefresh();
-      return cleanup;
-    } else {
+    if (!authState.session) {
       if (timeoutId) {
         clearTimeout(timeoutId);
         setTimeoutId(null);
       }
+      return;
     }
-  }, [authState.session, setupSessionTimeout, setupAutoRefresh, timeoutId]);
+
+    // Clear existing timeout
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+
+    // Set up session timeout
+    const timeout = setTimeout(async () => {
+      const now = Date.now();
+      const timeSinceActivity = now - lastActivity;
+      const expiresAt = authState.session?.expires_at 
+        ? authState.session.expires_at * 1000 
+        : now + SESSION_TIMEOUT_MS;
+      
+      if (timeSinceActivity > SESSION_TIMEOUT_MS || now >= expiresAt) {
+        console.log('Session expired due to inactivity');
+        toast.error('Session expired due to inactivity. Please sign in again.');
+        const { error } = await supabase.auth.signOut();
+        if (error) {
+          console.error('Sign out error:', error);
+        }
+      }
+    }, SESSION_TIMEOUT_MS);
+
+    setTimeoutId(timeout);
+
+    // Set up automatic refresh
+    const refreshInterval = setInterval(async () => {
+      const now = Date.now();
+      const expiresAt = authState.session?.expires_at 
+        ? authState.session.expires_at * 1000 
+        : now + SESSION_TIMEOUT_MS;
+      const timeUntilExpiry = expiresAt - now;
+
+      if (timeUntilExpiry <= REFRESH_THRESHOLD_MS) {
+        await refreshSession();
+      }
+    }, 60000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(refreshInterval);
+    };
+  }, [authState.session, lastActivity, refreshSession]);
 
   // Check admin status when user changes
   useEffect(() => {

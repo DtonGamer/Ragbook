@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.7";
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
-const EMBEDDING_DIMENSIONS = 384; // HuggingFace all-MiniLM-L6-v2
+const EMBEDDING_DIMENSIONS = 384;
 const MAX_MESSAGE_LENGTH = 10000;
 // Rate limiting (10 requests per minute)
 const RATE_LIMITS = {
@@ -178,13 +178,14 @@ async function logToSecurityLog(supabase, level, message, service, userId, sessi
 // HUGGINGFACE EMBEDDING GENERATION
 // ============================================================================
 async function generateQueryEmbedding(queryText) {
+  console.log('Generating embedding for query:', queryText);
   const HUGGINGFACE_API_KEY = Deno.env.get('HUGGINGFACE_API_KEY');
   if (!HUGGINGFACE_API_KEY) {
+    console.error('HUGGINGFACE_API_KEY not configured');
     throw new Error('HUGGINGFACE_API_KEY not configured');
   }
-  // ✅ Use a model that's explicitly designed for embeddings
-  const apiUrl = 'https://api-inference.huggingface.co/models/BAAI/bge-small-en-v1.5';
-  console.log('🌐 Calling HuggingFace API:', apiUrl);
+  const apiUrl = 'https://router.huggingface.co/hf-inference/models/BAAI/bge-small-en-v1.5';
+  console.log('Sending embedding request to:', apiUrl);
   const response = await fetch(apiUrl, {
     method: 'POST',
     headers: {
@@ -200,42 +201,29 @@ async function generateQueryEmbedding(queryText) {
   });
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('HuggingFace API error:', response.status, errorText);
     throw new Error(`HuggingFace API error: ${response.status} - ${errorText}`);
   }
   const embedding = await response.json();
-  // This model returns embeddings in a predictable format
-  return Array.isArray(embedding[0]) ? embedding[0] : embedding;
+  console.log('Received embedding response, type:', typeof embedding, 'length/array:', Array.isArray(embedding), 'first_element_type:', Array.isArray(embedding[0]) ? 'array' : 'number');
+  const result = Array.isArray(embedding[0]) ? embedding[0] : embedding;
+  
+  // Validate embedding dimensions
+  console.log('Embedding result length:', result.length);
+  if (result.length !== EMBEDDING_DIMENSIONS) {
+    console.error(`Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${result.length}`);
+    throw new Error(`Embedding dimension mismatch: expected ${EMBEDDING_DIMENSIONS}, got ${result.length}`);
+  }
+  
+  console.log('Successfully generated embedding with', result.length, 'dimensions');
+  return result;
 }
 // ============================================================================
-// SMART QUERY ANALYSIS (IMPROVED)
+// SIMPLIFIED QUERY ROUTING
 // ============================================================================
-async function analyzeQuery(message, userState, supabase, userId) {
+function shouldSearchDocuments(message) {
   const lowerMessage = message.toLowerCase().trim();
-  console.log('🔍 === ANALYZING QUERY ===');
-  console.log('Message:', message);
-  console.log('User ID:', userId);
-  // Document list request
-  const listKeywords = [
-    'list my files',
-    'list my documents',
-    'show my files',
-    'show my documents',
-    'what files do i have',
-    'what documents do i have',
-    'my uploaded files'
-  ];
-  if (listKeywords.some((phrase)=>lowerMessage.includes(phrase))) {
-    console.log('✅ Detected: DOCUMENT_LIST request');
-    return {
-      type: 'document_list',
-      confidence: 0.95,
-      reasoning: 'User explicitly asked to list documents',
-      alternatives: [],
-      userIntent: 'list_documents',
-      needsEmbedding: false
-    };
-  }
-  // Document search request - EXPLICIT KEYWORDS
+  // Document search keywords
   const searchKeywords = [
     'my document',
     'my pdf',
@@ -249,65 +237,106 @@ async function analyzeQuery(message, userState, supabase, userId) {
     'look in my files',
     'check my documents for'
   ];
-  if (searchKeywords.some((phrase)=>lowerMessage.includes(phrase))) {
-    console.log('✅ Detected: EXPLICIT DOCUMENT_SEARCH request');
-    return {
-      type: 'document_search',
-      confidence: 0.95,
-      reasoning: 'User explicitly mentioned their documents',
-      alternatives: [],
-      userIntent: 'search_documents',
-      needsEmbedding: true
-    };
-  }
-  // Check for question indicators
-  const questionWords = [
-    'what',
-    'how',
-    'why',
-    'when',
-    'where',
-    'who',
-    'explain',
-    'tell me about',
-    'describe'
+  return searchKeywords.some((phrase)=>lowerMessage.includes(phrase));
+}
+function shouldListDocuments(message) {
+  const lowerMessage = message.toLowerCase().trim();
+  // Document list keywords
+  const listKeywords = [
+    'list my files',
+    'list my documents',
+    'show my files',
+    'show my documents',
+    'what files do i have',
+    'what documents do i have',
+    'my uploaded files'
   ];
-  const hasQuestionWord = questionWords.some((word)=>lowerMessage.includes(word));
-  console.log('Has question word:', hasQuestionWord);
-  // ✨ CHECK DATABASE DIRECTLY for completed documents
-  let hasCompletedDocuments = false;
-  try {
-    const { data: docs, error } = await supabase.from('documents').select('id').eq('user_id', userId).eq('status', 'completed').limit(1);
-    hasCompletedDocuments = !error && docs && docs.length > 0;
-    console.log(`📊 User has completed documents: ${hasCompletedDocuments}`);
-  } catch (e) {
-    console.error('Error checking documents:', e);
-  }
-  // If user has documents AND asks a question, try RAG
-  if (hasQuestionWord && hasCompletedDocuments) {
-    console.log('✅ Detected: HYBRID_SEARCH (question + has documents)');
+  return listKeywords.some((phrase)=>lowerMessage.includes(phrase));
+}
+
+// ============================================================================
+// ENHANCED QUERY ROUTING
+// ============================================================================
+function analyzeQueryIntent(message, conversationHistory) {
+  console.log('Analyzing query intent for:', message);
+  const lowerMessage = message.toLowerCase().trim();
+  
+  // Strong document signals
+  const docKeywords = [
+    'my document', 'my pdf', 'my file', 'in my document',
+    'from my document', 'according to my', 'in the document',
+    'the pdf says', 'my notes say', 'in my textbook', 'in my files'
+  ];
+  
+  // List intent
+  const listKeywords = [
+    'list my files', 'show my documents', 'what files do i have', 'show my files'
+  ];
+  
+  console.log('Checking for document keywords:', docKeywords);
+  console.log('Checking for list keywords:', listKeywords);
+  
+  // Follow-up indicators (check conversation history)
+  const isFollowUp = conversationHistory.includes('document') || 
+                     conversationHistory.includes('Source') ||
+                     conversationHistory.includes('in your documents');
+  
+  console.log('Is follow-up?', isFollowUp);
+  
+  // Direct document reference
+  const hasDirectDocReference = docKeywords.some(kw => lowerMessage.includes(kw));
+  console.log('Has direct document reference?', hasDirectDocReference);
+  
+  // List request
+  const isListRequest = listKeywords.some(kw => lowerMessage.includes(kw));
+  console.log('Is list request?', isListRequest);
+  
+  // Comparative questions (need both sources)
+  const isComparative = /compare|versus|vs|difference between|similar to/.test(lowerMessage);
+  console.log('Is comparative?', isComparative);
+  
+  // Decision logic
+  if (isListRequest) {
+    console.log('Routing to document search: list request');
     return {
-      type: 'hybrid_search',
-      confidence: 0.85,
-      reasoning: 'Question detected and user has uploaded documents - trying RAG first',
-      alternatives: [
-        'general_chat'
-      ],
-      userIntent: 'potential_document_search',
-      needsEmbedding: true
+      shouldSearchDocs: true,
+      shouldUseGeneralKnowledge: false,
+      confidence: 1.0,
+      reason: 'list_request'
     };
   }
-  // General chat
-  console.log('✅ Detected: GENERAL_CHAT');
+  
+  if (hasDirectDocReference) {
+    console.log('Routing to document search: direct document reference');
+    return {
+      shouldSearchDocs: true,
+      shouldUseGeneralKnowledge: isComparative,  // Hybrid for comparisons
+      confidence: 0.95,
+      reason: 'explicit_document_reference'
+    };
+  }
+  
+  if (isFollowUp && lowerMessage.length < 50) {
+    // Short follow-ups likely refer to previous document discussion
+    console.log('Routing to document search: follow-up to document discussion');
+    return {
+      shouldSearchDocs: true,
+      shouldUseGeneralKnowledge: false,
+      confidence: 0.75,
+      reason: 'follow_up_to_document_discussion'
+    };
+  }
+  
+  // Default to general chat
+  console.log('Routing to general chat: no document signals found');
   return {
-    type: 'general_chat',
+    shouldSearchDocs: false,
+    shouldUseGeneralKnowledge: true,
     confidence: 0.9,
-    reasoning: 'Natural conversation - no explicit document search request',
-    alternatives: [],
-    userIntent: 'general_conversation',
-    needsEmbedding: false
+    reason: 'general_conversation'
   };
 }
+
 // ============================================================================
 // CREDIT MANAGEMENT
 // ============================================================================
@@ -415,14 +444,9 @@ function addRateLimitHeaders(response, rateLimitInfo) {
 // GENERAL CHAT HELPER
 // ============================================================================
 async function generateGeneralChatResponse(message, conversationHistory) {
-  console.log('🔵 === GENERAL CHAT FUNCTION CALLED ===');
-  console.log('📝 Message:', message);
-  console.log('📜 Conversation History Length:', conversationHistory?.length || 0);
   try {
     const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    console.log('🔑 GEMINI_API_KEY exists:', !!GEMINI_API_KEY);
     if (!GEMINI_API_KEY) {
-      console.error('❌ GEMINI_API_KEY not configured');
       throw new Error('GEMINI_API_KEY not configured');
     }
     const systemPrompt = `You are a friendly, intelligent study companion and conversational AI. Your name is RAG Book.
@@ -462,7 +486,6 @@ Respond naturally and conversationally. Keep responses focused but friendly. If 
         maxOutputTokens: 1024
       }
     };
-    console.log('🚀 Sending request to Gemini API...');
     const aiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -470,27 +493,307 @@ Respond naturally and conversationally. Keep responses focused but friendly. If 
       },
       body: JSON.stringify(requestBody)
     });
-    console.log('📡 Response Status:', aiResponse.status);
     if (!aiResponse.ok) {
       const errorText = await aiResponse.text();
-      console.error('❌ Gemini API Error Response:', errorText);
       throw new Error(`AI service error: ${aiResponse.status} - ${errorText}`);
     }
     const aiData = await aiResponse.json();
-    console.log('✅ Gemini Response Data:', JSON.stringify(aiData, null, 2));
     const responseText = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "Hey! I'm here to chat. What's on your mind?";
-    console.log('💬 Final Response Text:', responseText.substring(0, 200));
-    console.log('🔵 === GENERAL CHAT FUNCTION COMPLETED ===');
     return responseText;
   } catch (error) {
-    console.error('❌ === GENERAL CHAT ERROR ===');
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('❌ === END GENERAL CHAT ERROR ===');
+    console.error('General chat error:', error);
     return "Hey! I'm having a bit of trouble right now, but I'm here to chat. Try asking me again?";
   }
 }
+// ============================================================================
+// RAG RESPONSE GENERATION
+// ============================================================================
+async function generateRagResponse(message, chunks, conversationHistory = '') {
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not configured');
+  }
+  const context = chunks.map((chunk, idx) => {
+    let chunkText = `[Source ${idx + 1}: ${chunk.document_title}, Chunk ${chunk.chunk_index}/${chunk.chunk_metadata?.total_chunks || '?'}, Similarity: ${Math.round(chunk.similarity * 100)}%]\n`;
+    
+    // Add previous chunk for context
+    if (chunk.chunk_metadata?.previous_chunk) {
+      chunkText += `\n[Previous context: ...${chunk.chunk_metadata.previous_chunk}]\n`;
+    }
+    
+    chunkText += `\n${chunk.content}\n`;
+    
+    // Add next chunk for context
+    if (chunk.chunk_metadata?.next_chunk) {
+      chunkText += `\n[Following text: ${chunk.chunk_metadata.next_chunk}...]\n`;
+    }
+    
+    return chunkText;
+  }).join('\n\n---\n\n');
+  
+  // Include conversation history in the prompt
+  const fullContext = conversationHistory 
+    ? `${conversationHistory}\n\nRETRIEVED CONTEXT FROM USER'S DOCUMENTS:\n${context}`
+    : `RETRIEVED CONTEXT FROM USER'S DOCUMENTS:\n${context}`;
+  
+  const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: `You are RAG Book, a warm and intelligent AI study companion. You have access to the user's study documents and can search through them to help with learning.
+
+# YOUR PERSONALITY
+- Friendly, encouraging, and supportive like a patient tutor
+- Explain complex topics clearly without being condescending
+- Use examples and analogies to make concepts stick
+- Celebrate understanding and gently correct misconceptions
+- Show enthusiasm for learning!
+
+# CONVERSATION CONTEXT
+${conversationHistory || 'This is the start of our conversation.'}
+
+# RETRIEVED INFORMATION FROM USER'S DOCUMENTS
+${context}
+
+# USER'S CURRENT QUESTION
+"${message}"
+
+# INSTRUCTIONS FOR YOUR RESPONSE
+
+1. **Use conversation memory**: If the user refers to something from earlier (like "explain that simpler" or "what about the second one?"), check the conversation history to understand the reference.
+
+2. **Cite your sources**: When using information from documents, mention which document it came from (e.g., "According to your Biology Chapter 3...").
+
+3. **Acknowledge limitations**: If the documents don't contain enough information, be honest: "Your documents mention X, but I don't see details about Y. Would you like me to explain Y from my general knowledge?"
+
+4. **Connect ideas**: If you see information across multiple documents or chunks, synthesize them: "Your notes on X and your textbook chapter on Y both mention..."
+
+5. **Be conversational, not robotic**: 
+   - Good: "Great question! Your textbook explains that photosynthesis happens in two main stages..."
+   - Bad: "According to Source 1, photosynthesis is a two-stage process..."
+
+6. **Maintain context**: Remember what you've already explained. Don't repeat yourself unless asked.
+
+7. **Encourage deeper learning**: End with a thoughtful follow-up if appropriate (but don't overdo it).
+
+Now, provide your response:`
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.7,  // Balanced for personality + accuracy
+        topK: 30,
+        topP: 0.9,
+        maxOutputTokens: 1200
+      }
+    })
+  });
+  if (!aiResponse.ok) {
+    const errorBody = await aiResponse.text();
+    throw new Error(`AI service error: ${aiResponse.status} - ${errorBody}`);
+  }
+  const aiData = await aiResponse.json();
+  return aiData.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again.";
+}
+
+// ============================================================================
+// CONFIDENCE SCORING & FILTERING
+// ============================================================================
+function filterChunksByConfidence(chunks) {
+  // High confidence: 0.75+ (definitely relevant)
+  const highConfidence = chunks.filter(c => c.similarity >= 0.75);
+  
+  // Medium confidence: 0.65-0.74 (probably relevant)
+  const mediumConfidence = chunks.filter(c => c.similarity >= 0.65 && c.similarity < 0.75);
+  
+  // Low confidence: 0.55-0.64 (possibly relevant)
+  const lowConfidence = chunks.filter(c => c.similarity >= 0.55 && c.similarity < 0.65);
+  
+  return {
+    high: highConfidence,
+    medium: mediumConfidence,
+    low: lowConfidence,
+    hasHighQuality: highConfidence.length > 0
+  };
+}
+
+// ============================================================================
+// PROACTIVE AI BEHAVIORS
+// ============================================================================
+async function generateProactiveResponse(message, chunks, conversationHistory) {
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  
+  if (!GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY not configured for proactive response');
+    return {
+      mainResponse: "I couldn't generate a response. Please try again.",
+      suggestions: undefined,
+      clarifyingQuestion: undefined
+    };
+  }
+  
+  const context = chunks.map((chunk, idx) => 
+    `[Source ${idx + 1}]: ${chunk.content}`
+  ).join('\n\n');
+  
+  const prompt = `You are RAG Book, a proactive AI study companion.
+
+CONVERSATION HISTORY:
+${conversationHistory}
+
+RETRIEVED CONTEXT:
+${context}
+
+USER'S QUESTION:
+"${message}"
+
+Provide a response in JSON format with these fields:
+{
+  "mainResponse": "Your main answer to the question",
+  "suggestions": ["Related topic 1", "Related topic 2", "Related topic 3"],  // Optional: 3 related things they might want to learn
+  "clarifyingQuestion": "A follow-up question to deepen understanding"  // Optional: Ask if they want clarification
+}
+
+Be warm and encouraging. Make suggestions relevant to their studies.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.6,
+            maxOutputTokens: 1200
+          }
+        })
+      }
+    );
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    
+    try {
+      const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+      const parsed = JSON.parse(cleanText);
+      return parsed;
+    } catch (parseError) {
+      console.error('Failed to parse proactive response:', parseError);
+      return {
+        mainResponse: text,
+        suggestions: undefined,
+        clarifyingQuestion: undefined
+      };
+    }
+  } catch (error) {
+    console.error('Proactive response generation error:', error);
+    return {
+      mainResponse: "I couldn't generate a response. Please try again.",
+      suggestions: undefined,
+      clarifyingQuestion: undefined
+    };
+  }
+}
+
+// ============================================================================
+// CROSS-DOCUMENT DIVERSITY
+// ============================================================================
+function diversifyChunks(chunks, maxPerDoc = 2) {
+  const byDocument = new Map();
+  
+  // Group by document
+  for (const chunk of chunks) {
+    const docId = chunk.document_id;
+    if (!byDocument.has(docId)) {
+      byDocument.set(docId, []);
+    }
+    byDocument.get(docId).push(chunk);
+  }
+  
+  // Take top N from each document
+  const diversified = [];
+  
+  for (const docChunks of byDocument.values()) {
+    // Sort by combined_score or similarity
+    const sortedChunks = docChunks
+      .sort((a, b) => (b.combined_score || b.similarity) - (a.combined_score || a.similarity))
+      .slice(0, maxPerDoc);
+    
+    diversified.push(...sortedChunks);
+  }
+  
+  // Sort final list by score
+  return diversified.sort((a, b) => 
+    (b.combined_score || b.similarity) - (a.combined_score || a.similarity)
+  );
+}
+
+// ============================================================================
+// QUERY EXPANSION
+// ============================================================================
+async function expandQuery(originalQuery) {
+  console.log('Expanding query:', originalQuery);
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  
+  if (!GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY not configured for query expansion');
+    console.log('Returning original query as fallback:', originalQuery);
+    return [originalQuery];  // Fallback to original
+  }
+  
+  const prompt = `Generate 3-5 alternative phrasings and related keywords for this query. Return ONLY a JSON array of strings, no other text.
+
+Query: "${originalQuery}"
+
+Examples:
+- "How do plants make food?" → ["How do plants make food?", "photosynthesis process", "glucose production in plants", "plant nutrition"]
+- "What is mitosis?" → ["What is mitosis?", "cell division process", "mitotic phases", "chromosome separation"]
+
+Now generate alternatives for the query above. Return ONLY the JSON array:`;
+
+  try {
+    console.log('Sending query expansion request to Gemini API');
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 200
+          }
+        })
+      }
+    );
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    console.log('Query expansion API response:', text);
+    
+    // Parse JSON response
+    const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+    const alternatives = JSON.parse(cleanText);
+    console.log('Parsed query alternatives:', alternatives);
+    
+    return Array.isArray(alternatives) ? alternatives : [originalQuery];
+  } catch (error) {
+    console.error('Query expansion failed:', error);
+    console.log('Returning original query as fallback:', originalQuery);
+    return [originalQuery];  // Fallback to original
+  }
+}
+
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
@@ -610,37 +913,40 @@ async function handleRequest(req) {
       role: 'user',
       content: sanitizedMessage
     });
-    // Get user state
-    const { data: userState } = await supabase.rpc('get_or_create_user_state', {
-      target_user_id: user.id
-    });
     // Fetch conversation history
     const { data: recentMessages } = await supabase.from('messages').select('role, content').eq('conversation_id', conversationId).order('created_at', {
       ascending: false
     }).limit(10);
     const conversationHistory = (recentMessages || []).reverse().map((msg)=>`${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n\n');
-    // Analyze query (NOW PASSING SUPABASE AND USER.ID)
-    const queryAnalysis = await analyzeQuery(sanitizedMessage, userState, supabase, user.id);
-    const { data: shouldYield } = await supabase.rpc('should_yield_control', {
-      target_user_id: user.id
-    });
+    // Get the mode from the request (defaults to 'auto')
+    const mode = body.mode || 'auto';
+    console.log('Chat mode:', mode);
+
+    // Route query
     let responseContent = '';
     let sources = [];
-    console.log('🎯 Query Analysis Result:', JSON.stringify(queryAnalysis, null, 2));
-    // ========================================================================
-    // SMART ROUTING: GENERATE RESPONSE BASED ON QUERY TYPE
-    // ========================================================================
-    if (shouldYield && queryAnalysis.confidence < 0.7) {
-      responseContent = `I sense you might be looking for something specific, but I'm not entirely sure what you need. Could you help me understand better? 
+    
+    // If mode is explicitly set, override the intent detection
+    let shouldSearchDocs = false;
+    
+    if (mode === 'document') {
+      // Forced document search mode
+      shouldSearchDocs = true;
+      console.log('Forced document search mode activated');
+    } else if (mode === 'general') {
+      // Forced general chat mode
+      shouldSearchDocs = false;
+      console.log('Forced general chat mode activated');
+    } else {
+      // Auto mode - use intent detection with improved logic
+      const intent = analyzeQueryIntent(sanitizedMessage, conversationHistory);
+      console.log('Query intent in auto mode:', intent);
+      shouldSearchDocs = intent.shouldSearchDocs;
+    }
+    
+    console.log('Analyzing message for document search:', sanitizedMessage);
 
-I can help you with:
-• Searching through your uploaded documents
-• Listing your uploaded files  
-• Having a general conversation
-
-What would be most helpful for you right now?`;
-    } else if (queryAnalysis.type === 'document_list') {
-      console.log('📋 Processing DOCUMENT_LIST request');
+    if (shouldListDocuments(sanitizedMessage)) {
       // List documents
       const { data: documents } = await supabase.from('documents').select('id, original_name, created_at, file_size, status, user_id, chunk_count').eq('user_id', user.id).order('created_at', {
         ascending: false
@@ -658,190 +964,212 @@ What would be most helpful for you right now?`;
         const completedCount = documents.filter((d)=>d.status === 'completed').length;
         responseContent = `Here are your uploaded documents:\n\n${docList}\n\n---\n\n**Summary:** ${completedCount} of ${documents.length} documents ready to search.\n\nYou can ask me to search through your completed documents for specific information.`;
       }
-    } else if (queryAnalysis.needsEmbedding) {
-      console.log('🔍 Processing DOCUMENT_SEARCH or HYBRID_SEARCH request');
-      // Document search or hybrid search
+    } else if (shouldSearchDocs) {
+      console.log('Starting document search for query:', sanitizedMessage);
+      // Hybrid search with query expansion
       try {
-        console.log('🔮 Generating query embedding with HuggingFace...');
+        // Expand the query first
+        console.log('Expanding query:', sanitizedMessage);
+        const expandedQueries = await expandQuery(sanitizedMessage);
+        console.log('Expanded queries:', expandedQueries);
+        
+        let allChunks = [];
+        const processedDocuments = new Set(); // To avoid duplicate documents
+
+        // Search with original and expanded queries
+        for (const query of expandedQueries.slice(0, 3)) {  // Limit to 3 to avoid rate limits
+          console.log('Processing expanded query:', query);
+          const queryEmbedding = await generateQueryEmbedding(query);
+          
+          // Clean query for full-text search
+          const keywordQuery = query
+            .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special chars
+            .split(/\s+/)
+            .filter(word => word.length > 2)
+            .join(' & ');  // PostgreSQL tsquery format
+
+          try {
+            // Use hybrid search function
+            console.log('Running hybrid search with query:', query, 'and embedding length:', queryEmbedding.length);
+            const { data: chunks, error: searchError } = await supabase.rpc('hybrid_search_documents', {
+              query_text: keywordQuery,
+              query_embedding: queryEmbedding,
+              p_user_id: user.id,
+              match_threshold: 0.65,
+              match_count: 10  // Get more for diversity
+            });
+
+            console.log('Hybrid search results - chunks found:', chunks?.length || 0, 'error:', searchError);
+            if (!searchError && chunks && chunks.length > 0) {
+              console.log('Found', chunks.length, 'chunks from hybrid search');
+              // Add chunks that are from new documents only
+              const newChunks = chunks.filter(chunk => !processedDocuments.has(chunk.document_id));
+              console.log('New chunks from unique documents:', newChunks.length);
+              newChunks.forEach(chunk => processedDocuments.add(chunk.document_id));
+              allChunks = allChunks.concat(newChunks);
+            }
+          } catch (hybridError) {
+            console.error('Hybrid search failed, falling back to vector search:', hybridError);
+            // Fallback to original vector search
+            console.log('Running fallback vector search for query:', query);
+            const { data: chunks, error: searchError } = await supabase.rpc('match_documents', {
+              query_embedding: queryEmbedding,
+              match_threshold: 0.65,
+              match_count: 10,
+              p_user_id: user.id
+            });
+            
+            console.log('Vector search results - chunks found:', chunks?.length || 0, 'error:', searchError);
+            if (!searchError && chunks && chunks.length > 0) {
+              console.log('Found', chunks.length, 'chunks from vector search');
+              // Add chunks that are from new documents only
+              const newChunks = chunks.filter(chunk => !processedDocuments.has(chunk.document_id));
+              console.log('New chunks from vector search:', newChunks.length);
+              newChunks.forEach(chunk => processedDocuments.add(chunk.document_id));
+              allChunks = allChunks.concat(newChunks);
+            }
+          }
+        }
+
+        console.log('Total chunks found across all queries:', allChunks.length);
+        
+        // Sort by combined score (or similarity if no combined score)
+        allChunks.sort((a, b) => (b.combined_score || b.similarity) - (a.combined_score || a.similarity));
+        
+        // Apply cross-document diversification
+        console.log('Applying diversification to', allChunks.length, 'chunks');
+        const diversifiedChunks = diversifyChunks(allChunks, 2);  // Max 2 per doc
+        const topChunks = diversifiedChunks.slice(0, 10);  // Take top results after diversification
+        console.log('Top chunks after diversification:', topChunks.length);
+        
+        if (topChunks.length === 0) {
+          console.log('No chunks found for query:', sanitizedMessage);
+          responseContent = "I couldn't find any relevant information in your documents for that query. Try rephrasing your question or check if you have uploaded the relevant documents.";
+        } else {
+          // Filter by confidence
+          const filtered = filterChunksByConfidence(topChunks);
+          
+          if (!filtered.hasHighQuality && filtered.medium.length === 0) {
+            // Only low-confidence matches found
+            const bestMatch = topChunks[0];
+            responseContent = `I found some mentions in your documents, but they don't seem very relevant to your question (best match confidence: ${Math.round(bestMatch.similarity * 100)}%). 
+
+Would you like me to:
+1. Show you what I found anyway?
+2. Try rephrasing your question?
+3. Answer from my general knowledge instead?`;
+            
+            sources = topChunks.slice(0, 3).map((chunk) => ({
+              document_id: chunk.document_id,
+              document_title: chunk.document_title,
+              similarity: chunk.similarity,
+              content: chunk.content.substring(0, 200) + '...',
+              chunk_index: chunk.chunk_index,
+              search_type: chunk.search_type || 'vector'  // Add search type information
+            }));
+          } else {
+            // Use high + medium confidence chunks
+            const goodChunks = [...filtered.high, ...filtered.medium].slice(0, 5);
+            
+            // Add confidence information to the response
+            const bestMatch = goodChunks[0];
+            const confidenceLevel = bestMatch.similarity >= 0.75 ? 'high' : 
+                                  bestMatch.similarity >= 0.65 ? 'medium' : 'low';
+                                  
+            const confidenceMessage = confidenceLevel === 'low' 
+              ? "\n\n⚠️ Note: The information found has low similarity to your query. Please verify the accuracy of the response."
+              : confidenceLevel === 'medium'
+              ? "\n\nℹ️ Note: The information found has moderate similarity to your query. Please verify the accuracy of the response."
+              : "";
+            
+            // Get proactive response with suggestions
+            const proactiveResult = await generateProactiveResponse(
+              sanitizedMessage,
+              goodChunks,
+              conversationHistory
+            );
+            
+            // Format response with suggestions
+            responseContent = proactiveResult.mainResponse;
+            
+            if (proactiveResult.suggestions || proactiveResult.clarifyingQuestion) {
+              responseContent += '\n\n---\n\n';
+              
+              if (proactiveResult.suggestions && proactiveResult.suggestions.length > 0) {
+                responseContent += '**You might also want to explore:**\n';
+                proactiveResult.suggestions.forEach((s) => {
+                  responseContent += `• ${s}\n`;
+                });
+              }
+              
+              if (proactiveResult.clarifyingQuestion) {
+                responseContent += `\n💡 ${proactiveResult.clarifyingQuestion}`;
+              }
+            }
+            
+            responseContent += confidenceMessage;
+            
+            // Store metadata for frontend to show interactive suggestions
+            sources = goodChunks.map((chunk) => ({
+              document_id: chunk.document_id,
+              document_title: chunk.document_title,
+              similarity: chunk.similarity,
+              content: chunk.content.substring(0, 200) + '...',
+              chunk_index: chunk.chunk_index,
+              confidence: chunk.similarity, // Add confidence score
+              search_type: chunk.search_type || 'vector',  // Add search type information
+              // Add proactive metadata
+              suggestions: proactiveResult.suggestions,
+              clarifyingQuestion: proactiveResult.clarifyingQuestion
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Hybrid search error:', error);
+        // Fallback to original search
+        console.log('Falling back to original vector search for query:', sanitizedMessage);
         const queryEmbedding = await generateQueryEmbedding(sanitizedMessage);
-        console.log('✅ Query embedding generated successfully, dimensions:', queryEmbedding.length);
-        console.log('🔍 Calling match_documents RPC function...');
-        console.log('   - match_threshold: 0.65');
-        console.log('   - match_count: 5');
-        console.log('   - user_id:', user.id);
         const { data: chunks, error: searchError } = await supabase.rpc('match_documents', {
           query_embedding: queryEmbedding,
           match_threshold: 0.65,
           match_count: 5,
           p_user_id: user.id
         });
-        console.log('📊 RPC Response:');
-        console.log('   - Error:', searchError ? searchError.message : 'None');
-        console.log('   - Chunks found:', chunks?.length || 0);
-        if (searchError) {
-          await logToSecurityLog(supabase, 3, 'Knowledge base search failed', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
-            error: searchError.message
-          });
-          if (queryAnalysis.type === 'hybrid_search') {
-            console.log('⚠️ Search failed, falling back to general chat');
-            responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
-          } else {
-            responseContent = "I'm sorry, I couldn't search your documents at the moment. Please try again later.";
-          }
-        } else if (!chunks || chunks.length === 0) {
-          console.log('⚠️ No chunks found');
-          if (queryAnalysis.type === 'hybrid_search') {
-            console.log('Falling back to general chat (no chunks)');
-            responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
-          } else {
-            responseContent = "I couldn't find any relevant information in your documents for that query. Try rephrasing your question or check if you have uploaded the relevant documents.";
-          }
+        
+        console.log('Fallback search results - chunks found:', chunks?.length || 0, 'error:', searchError);
+        if (searchError || !chunks || chunks.length === 0) {
+          console.log('Fallback search also failed for query:', sanitizedMessage);
+          responseContent = "I couldn't find any relevant information in your documents for that query. Try rephrasing your question or check if you have uploaded the relevant documents.";
         } else {
-          console.log(`✅ Found ${chunks.length} relevant chunks`);
-          // ====================================================================
-          // IMPROVED RAG RESPONSE GENERATION
-          // ====================================================================
-          const context = chunks.map((chunk, idx)=>`[Source ${idx + 1}: ${chunk.document_title}, Chunk ${chunk.chunk_index}, Similarity: ${Math.round(chunk.similarity * 100)}%]\n${chunk.content}`).join('\n\n---\n\n');
-          console.log('📚 CONTEXT BEING SENT TO GEMINI:');
-          console.log('Context length:', context.length);
-          console.log('Number of sources:', chunks.length);
-          console.log('First 200 chars:', context.substring(0, 200));
-          sources = chunks.map((chunk)=>({
+          console.log('Fallback search successful, generating RAG response with', chunks.length, 'chunks');
+          responseContent = await generateRagResponse(sanitizedMessage, chunks, conversationHistory);
+          sources = chunks.map((chunk) => ({
               document_id: chunk.document_id,
               document_title: chunk.document_title,
               similarity: chunk.similarity,
               content: chunk.content.substring(0, 200) + '...',
               chunk_index: chunk.chunk_index
             }));
-          try {
-            const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-            if (!GEMINI_API_KEY) {
-              throw new Error('GEMINI_API_KEY not configured');
-            }
-            const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                contents: [
-                  {
-                    parts: [
-                      {
-                        text: `You are a RAG (Retrieval Augmented Generation) assistant. Answer STRICTLY based on the context below.
-
-USER'S QUESTION:
-"${sanitizedMessage}"
-
-RETRIEVED CONTEXT FROM USER'S DOCUMENTS:
-${context}
-
-INSTRUCTIONS:
-- Answer using ONLY the context above
-- If the answer is not in the context, say "I don't see information about that in your documents"
-- Quote specific parts when answering
-- Mention document names when citing information
-- Do NOT use external knowledge
-
-Answer:`
-                      }
-                    ]
-                  }
-                ],
-                generationConfig: {
-                  temperature: 0.2,
-                  topK: 10,
-                  topP: 0.8,
-                  maxOutputTokens: 800
-                }
-              })
-            });
-            if (!aiResponse.ok) {
-              const errorBody = await aiResponse.text();
-              console.error('Gemini API error:', aiResponse.status, errorBody);
-              throw new Error(`AI service error: ${aiResponse.status}`);
-            }
-            const aiData = await aiResponse.json();
-            responseContent = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "I couldn't generate a response. Please try again.";
-            console.log('✅ Gemini response generated:', responseContent.substring(0, 100));
-          } catch (aiError) {
-            console.error('AI generation error:', aiError);
-            await logToSecurityLog(supabase, 3, 'AI service error for document search', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
-              error: String(aiError)
-            });
-            responseContent = "I'm sorry, I couldn't generate a response at the moment. Please try again later.";
-          }
         }
-      } catch (embeddingError) {
-        console.error('Embedding generation error:', embeddingError);
-        await logToSecurityLog(supabase, 3, 'Embedding generation failed', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, null, {
-          error: String(embeddingError)
-        });
-        responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
       }
     } else {
-      console.log('💬 Processing GENERAL_CHAT request');
       // General chat
       responseContent = await generateGeneralChatResponse(sanitizedMessage, conversationHistory);
     }
-    // ========================================================================
-    // SAVE ASSISTANT MESSAGE
-    // ========================================================================
-    const { data: savedMessage } = await supabase.from('messages').insert({
+    // Save assistant message
+    await supabase.from('messages').insert({
       conversation_id: conversationId,
       role: 'assistant',
       content: responseContent,
-      metadata: {
-        ...sources.length > 0 ? {
-          sources
-        } : {},
-        decisionFactors,
-        systemState: {
-          userTrustLevel: userState?.trust_level || 0.5,
-          lastUpdated: new Date().toISOString(),
-          learningPoints: [
-            `User prefers ${queryAnalysis.type} queries`,
-            `Confidence level: ${Math.round(queryAnalysis.confidence * 100)}%`
-          ]
-        }
-      }
-    }).select().single();
-    // Log decision
-    if (savedMessage) {
-      await supabase.rpc('log_decision', {
-        target_user_id: user.id,
-        target_conversation_id: conversationId,
-        target_message_id: savedMessage.id,
-        decision_factors: decisionFactors,
-        confidence_score: queryAnalysis.confidence,
-        alternatives: queryAnalysis.alternatives,
-        reasoning: queryAnalysis.reasoning
-      });
-    }
-    // Update user state
-    await supabase.rpc('update_user_state', {
-      target_user_id: user.id,
-      interaction_data: {
-        trust_delta: queryAnalysis.confidence > 0.7 ? 0.05 : -0.02,
-        intent_patterns: {
-          ...userState?.intent_patterns || {},
-          [queryAnalysis.userIntent || 'unknown']: (userState?.intent_patterns?.[queryAnalysis.userIntent || 'unknown'] || 0) + 1
-        },
-        preferences: {
-          ...userState?.preferences || {},
-          last_query_type: queryAnalysis.type,
-          last_confidence: queryAnalysis.confidence,
-          has_documents: sources.length > 0
-        }
-      }
+      metadata: sources.length > 0 ? {
+        sources
+      } : null
     });
     // Update conversation timestamp
     await supabase.from('conversations').update({
       updated_at: new Date().toISOString()
     }).eq('id', conversationId);
     await logToSecurityLog(supabase, 1, 'Response sent successfully', 'rag-chat', user.id, null, requestId, userInfo.ip, userInfo.userAgent, {
-      queryType: queryAnalysis.type,
-      confidence: queryAnalysis.confidence,
       creditsRemaining: creditResult.remaining,
       plan: creditResult.plan
     });
@@ -860,7 +1188,7 @@ Answer:`
     });
     return addSecurityHeaders(response);
   } catch (error) {
-    console.error('❌ Unexpected error in handler:', error);
+    console.error('Unexpected error in handler:', error);
     await logToSecurityLog(supabase, 4, 'Unexpected error in rag-chat handler', 'rag-chat', userInfo.userId || null, null, requestId, userInfo.ip, userInfo.userAgent, null, {
       error: String(error),
       stack: error.stack
