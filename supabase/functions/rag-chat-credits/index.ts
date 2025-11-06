@@ -255,6 +255,95 @@ function shouldListDocuments(message) {
 }
 
 // ============================================================================
+// AI-POWERED QUERY INTENT ANALYSIS
+// ============================================================================
+async function analyzeQueryIntentWithGemini(message, conversationHistory) {
+  const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+  
+  if (!GEMINI_API_KEY) {
+    console.error('❌ GEMINI_API_KEY not configured - falling back to keywords');
+    // Fallback to keyword matching
+    return analyzeQueryIntent(message, conversationHistory);
+  }
+  
+  const prompt = `You are a query intent classifier for a RAG (Retrieval-Augmented Generation) system.
+
+**CONVERSATION HISTORY:**
+${conversationHistory || 'No previous conversation'}
+
+**USER MESSAGE:** 
+"${message}"
+
+**TASK:**
+Determine if this message requires searching the user's uploaded documents or just general knowledge.
+
+**SEARCH DOCUMENTS when:**
+- User explicitly mentions "my document/file/PDF/notes/textbook"
+- User asks about content they uploaded
+- Follow-up questions referring to previous document-based answers
+- Questions like "what does it say about X in my files?"
+
+**USE GENERAL KNOWLEDGE when:**
+- Greetings ("hello", "hi", "hey")
+- General questions that don't reference uploaded content
+- Casual conversation
+- Questions about common knowledge topics
+
+**IMPORTANT:**
+- If the message is a greeting (hi, hello, hey, what's up), ALWAYS use general knowledge
+- Be conservative: when in doubt, prefer general knowledge over document search
+- Only search documents when there's clear evidence the user wants their files searched
+
+Return ONLY this JSON structure (no markdown, no explanation):
+{
+  "shouldSearchDocs": boolean,
+  "confidence": number (0.0-1.0),
+  "reason": string
+}`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,  // Very low for consistent classification
+            maxOutputTokens: 150
+          }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+    const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
+    const intent = JSON.parse(cleanText);
+    
+    console.log('✅ Gemini intent analysis:', intent);
+    
+    // Validate response structure
+    if (typeof intent.shouldSearchDocs !== 'boolean') {
+      throw new Error('Invalid response format from Gemini');
+    }
+    
+    return intent;
+    
+  } catch (error) {
+    console.error('❌ Gemini intent analysis failed:', error);
+    // Fallback to keyword matching
+    console.log('🔄 Falling back to keyword-based intent detection');
+    return analyzeQueryIntent(message, conversationHistory);
+  }
+}
+
+// ============================================================================
 // ENHANCED QUERY ROUTING
 // ============================================================================
 function analyzeQueryIntent(message, conversationHistory) {
@@ -746,22 +835,21 @@ async function expandQuery(originalQuery) {
   
   if (!GEMINI_API_KEY) {
     console.error('GEMINI_API_KEY not configured for query expansion');
-    console.log('Returning original query as fallback:', originalQuery);
-    return [originalQuery];  // Fallback to original
+    return [originalQuery];  // ✅ Always return original
   }
   
-  const prompt = `Generate 3-5 alternative phrasings and related keywords for this query. Return ONLY a JSON array of strings, no other text.
+  const prompt = `Generate 2-3 alternative search queries for: "${originalQuery}"
 
-Query: "${originalQuery}"
+Return ONLY a JSON array of strings (no markdown):
+["${originalQuery}", "alternative 1", "alternative 2"]
 
-Examples:
-- "How do plants make food?" → ["How do plants make food?", "photosynthesis process", "glucose production in plants", "plant nutrition"]
-- "What is mitosis?" → ["What is mitosis?", "cell division process", "mitotic phases", "chromosome separation"]
+Example:
+Input: "How do plants make food?"
+Output: ["How do plants make food?", "photosynthesis process", "plant nutrition"]
 
-Now generate alternatives for the query above. Return ONLY the JSON array:`;
+Now generate for the input above:`;
 
   try {
-    console.log('Sending query expansion request to Gemini API');
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
       {
@@ -771,26 +859,41 @@ Now generate alternatives for the query above. Return ONLY the JSON array:`;
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             temperature: 0.3,
-            maxOutputTokens: 200
+            maxOutputTokens: 150
           }
         })
       }
     );
 
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
+    }
+
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
-    console.log('Query expansion API response:', text);
-    
-    // Parse JSON response
     const cleanText = text.replace(/```json\n?|\n?```/g, '').trim();
-    const alternatives = JSON.parse(cleanText);
-    console.log('Parsed query alternatives:', alternatives);
     
-    return Array.isArray(alternatives) ? alternatives : [originalQuery];
+    let alternatives = JSON.parse(cleanText);
+    
+    // ✅ CRITICAL: Always include original query
+    if (!Array.isArray(alternatives)) {
+      alternatives = [originalQuery];
+    }
+    
+    if (alternatives.length === 0) {
+      alternatives = [originalQuery];
+    }
+    
+    if (!alternatives.includes(originalQuery)) {
+      alternatives.unshift(originalQuery);
+    }
+    
+    console.log('✅ Expanded queries:', alternatives);
+    return alternatives.slice(0, 3);  // Max 3
+    
   } catch (error) {
     console.error('Query expansion failed:', error);
-    console.log('Returning original query as fallback:', originalQuery);
-    return [originalQuery];  // Fallback to original
+    return [originalQuery];  // ✅ Always fallback
   }
 }
 
@@ -920,28 +1023,42 @@ async function handleRequest(req) {
     const conversationHistory = (recentMessages || []).reverse().map((msg)=>`${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n\n');
     // Get the mode from the request (defaults to 'auto')
     const mode = body.mode || 'auto';
-    console.log('Chat mode:', mode);
+    console.log('═══════════════════════════════════════════════');
+    console.log('📥 INCOMING REQUEST');
+    console.log('Message:', sanitizedMessage);
+    console.log('Mode:', mode);  // Check if mode is present
+    console.log('ConversationId:', conversationId);
+    console.log('═══════════════════════════════════════════════');
+
+    // Validate mode parameter
+    const validModes = ['auto', 'document', 'general'];
+    if (!validModes.includes(mode)) {
+      console.warn(`Invalid mode received: ${mode}, defaulting to 'auto'`);
+      mode = 'auto';
+    }
 
     // Route query
     let responseContent = '';
     let sources = [];
     
-    // If mode is explicitly set, override the intent detection
+    // Determine if documents should be searched based on selected mode
     let shouldSearchDocs = false;
     
     if (mode === 'document') {
       // Forced document search mode
       shouldSearchDocs = true;
-      console.log('Forced document search mode activated');
+      console.log('📁 Document mode: Forcing document search for query:', sanitizedMessage);
     } else if (mode === 'general') {
       // Forced general chat mode
       shouldSearchDocs = false;
-      console.log('Forced general chat mode activated');
+      console.log('💬 General mode: Using general knowledge only for query:', sanitizedMessage);
     } else {
-      // Auto mode - use intent detection with improved logic
-      const intent = analyzeQueryIntent(sanitizedMessage, conversationHistory);
-      console.log('Query intent in auto mode:', intent);
+      // Auto mode - use AI intent detection to decide
+      console.log('🤖 Auto mode: Analyzing intent with Gemini...');
+      const intent = await analyzeQueryIntentWithGemini(sanitizedMessage, conversationHistory);
+      console.log('Query intent from Gemini:', intent);
       shouldSearchDocs = intent.shouldSearchDocs;
+      console.log(`🎯 Auto mode decision: ${shouldSearchDocs ? 'Searching documents' : 'Using general knowledge'} based on AI analysis`);
     }
     
     console.log('Analyzing message for document search:', sanitizedMessage);
