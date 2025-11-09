@@ -31,12 +31,40 @@ export const useMessageHandler = ({
   const { creditsLeft, isPro } = useSubscription();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
+  const createConversation = async () => {
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from("conversations")
+      .insert({ user_id: user.id })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creating conversation:", error);
+      toast.error("Failed to create conversation");
+      return null;
+    }
+
+    try {
+      localStorage.setItem("lastConversationId", data.id);
+    } catch {}
+    
+    return data.id;
+  };
+
   const handleSendMessage = async (content: string, mode: "auto" | "document" | "general" = "auto") => {
     console.log("🚀 Starting handleSendMessage with mode:", mode);
+
+    let currentConversationId = conversationId;
     
-    if (!conversationId) {
-      toast.error("No active conversation");
-      return;
+    // If no conversation ID, create a new one
+    if (!currentConversationId) {
+      currentConversationId = await createConversation();
+      if (!currentConversationId) {
+        toast.error("Failed to create conversation");
+        return;
+      }
     }
 
     // Check credits before sending
@@ -84,7 +112,7 @@ export const useMessageHandler = ({
 
       const requestBody = {
         message: content,
-        conversationId,
+        conversationId: currentConversationId, // Use the potentially updated conversation ID
         mode,  // Add the mode to the request body
       };
       
@@ -102,6 +130,83 @@ export const useMessageHandler = ({
       });
 
       if (!response.ok) {
+        if (response.status === 404) {
+          // Conversation not found, create a new one and retry
+          console.log("Conversation not found, creating new one...");
+          const newConversationId = await createConversation();
+          if (newConversationId) {
+            // Retry the request with the new conversation ID
+            requestBody.conversationId = newConversationId;
+            
+            const retryResponse = await fetch(fnUrl, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${currentSession.access_token}`,
+              },
+              body: JSON.stringify(requestBody),
+            });
+
+            if (!retryResponse.ok) {
+              throw new Error(`Retry failed: ${retryResponse.status}`);
+            }
+
+            // Process the successful retry response
+            const retryResponseData = await retryResponse.json();
+            const retryCreditsInfo = retryResponseData.credits;
+
+            // Refresh subscription to get updated credits
+            if (retryCreditsInfo !== undefined) {
+              console.log("💰 Credits after message (retry):", retryCreditsInfo);
+              await refreshSubscription();
+            }
+
+            // Fetch fresh messages from database to ensure consistency
+            const { data: newMessages, error: fetchError } = await supabase
+              .from("messages")
+              .select("*")
+              .eq("conversation_id", newConversationId)
+              .order("created_at", { ascending: true });
+
+            if (fetchError) {
+              console.error("Error fetching updated messages:", fetchError);
+              // Fall back to optimistic update if fetch fails
+              const assistantMessageObj: Message = { 
+                role: "assistant", 
+                content: retryResponseData.message || "No response received", 
+                sources: retryResponseData.sources || [],
+                messageId: tempAssistantMessageId,
+                userId: user?.id
+              };
+              setMessages(prev => {
+                return [...prev.filter(m => m.messageId !== tempUserMessageId), assistantMessageObj];
+              });
+            } else {
+              // Load fresh messages from database
+              const loadedMessages: Message[] = newMessages.map(msg => ({
+                role: msg.role as "user" | "assistant",
+                content: msg.content,
+                sources: (msg.metadata as { sources?: any[] })?.sources || [],
+                messageId: msg.id,
+                userId: user?.id
+              }));
+
+              console.log("✅ Replacing with fresh messages from DB (retry):", loadedMessages.length);
+              setMessages(loadedMessages);
+              
+              // Update cache
+              try {
+                sessionStorage.setItem(`chat:${newConversationId}`, JSON.stringify(loadedMessages));
+              } catch (e) {
+                console.warn("Failed to update cache:", e);
+              }
+            }
+            return; // Successfully handled with retry
+          } else {
+            throw new Error("Failed to create a new conversation after 'not found' error");
+          }
+        }
+        
         if (response.status === 401) {
           toast.error("Your session expired. Please sign in again.");
           await supabase.auth.signOut({ scope: 'local' });
@@ -125,7 +230,7 @@ export const useMessageHandler = ({
         } catch (e) {
           errorMessage = response.statusText || errorMessage;
         }
-        
+
         throw new Error(errorMessage);
       }
 
@@ -142,7 +247,7 @@ export const useMessageHandler = ({
       const { data: newMessages, error: fetchError } = await supabase
         .from("messages")
         .select("*")
-        .eq("conversation_id", conversationId)
+        .eq("conversation_id", currentConversationId)
         .order("created_at", { ascending: true });
 
       if (fetchError) {
@@ -173,7 +278,7 @@ export const useMessageHandler = ({
         
         // Update cache
         try {
-          sessionStorage.setItem(`chat:${conversationId}`, JSON.stringify(loadedMessages));
+          sessionStorage.setItem(`chat:${currentConversationId}`, JSON.stringify(loadedMessages));
         } catch (e) {
           console.warn("Failed to update cache:", e);
         }
