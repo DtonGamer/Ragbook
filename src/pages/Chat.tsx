@@ -4,7 +4,7 @@ import { CreditsDisplay } from "@/components/CreditsDisplay";
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { useAuth } from "@/hooks/useAuth";
 import { useSubscription } from "@/hooks/useSubscription";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { ConversationSidebar } from "@/components/ConversationSidebar";
@@ -32,7 +32,7 @@ const Chat = () => {
   const navigate = useNavigate();
   const { user, isAdmin, signOut } = useAuth();
   const { isPro, creditsLeft, refreshSubscription } = useSubscription();
-  
+
   // Enhanced state initialization to prevent welcome message flash
   const [messages, setMessages] = useState<Message[]>(() => {
     // On mount, immediately check if we have a cached conversation
@@ -56,7 +56,7 @@ const Chat = () => {
 
   const [isLoading, setIsLoading] = useState(false);
   const [chatMode, setChatMode] = useState<"auto" | "document" | "general">("auto");
-  
+
   const [conversationId, setConversationId] = useState<string | null>(() => {
     try {
       return localStorage.getItem("lastConversationId");
@@ -85,18 +85,21 @@ const Chat = () => {
   // const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   // We can still use it if needed for other reasons
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
-  
+
   // Use the new hooks
-  const { 
-    messagesEndRef, 
-    shouldAutoScroll, 
+  const {
+    messagesEndRef,
+    scrollContainerRef,
+    shouldAutoScroll,
     setShouldAutoScroll,
     isInitialLoad,
     setIsInitialLoad,
+    isUserScrolling,
+    setIsUserScrolling,
     sidebarCollapsed: hookSidebarCollapsed,
     setSidebarCollapsed: setHookSidebarCollapsed
   } = useScrollBehavior({ messages });
-  
+
   // Use the conversation manager hook to handle conversation logic
   const conversationManager = useConversationManager({
     initialMessages: messages,
@@ -110,7 +113,7 @@ const Chat = () => {
       setIsNavigatingToChatHook && setIsNavigatingToChatHook(navigating);
     },
   });
-  
+
   const {
     messages: conversationMessages,
     setMessages: setConversationMessages,
@@ -145,15 +148,14 @@ const Chat = () => {
 
   // Use the cache hook for message deduplication
   const { deduplicateMessages } = useMessageCache();
-  
+
 
 
   // Create local version of handleSendMessage to maintain the original signature
   const handleSendMessage = async (content: string, mode: "auto" | "document" | "general") => {
-    // The credit checking and upgrade modal logic is now handled in the hook
-    // Enable smooth scrolling for new messages being added
+    // Enable smooth scrolling for new messages being added and reset user scroll state
     setShouldAutoScroll(true);
-    setIsInitialLoad(false); // Make sure we're not in initial load mode
+    setIsUserScrolling(false);
 
     await sendMessageFromHook(content, mode);
   };
@@ -176,20 +178,7 @@ const Chat = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sidebarCollapsed]);
 
-  // Smarter scrolling useEffect - keeping this here for now to maintain behavior
-  useEffect(() => {
-    // Only auto-scroll if:
-    // 1. We're supposed to auto-scroll (new messages)
-    // 2. We're not on the initial load
-    // 3. We have messages to scroll to
-    if (shouldAutoScroll && !isInitialLoad && messages.length > 0) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    } else if (isInitialLoad && messages.length > 0) {
-      // On initial load, jump instantly to bottom without animation
-      messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      setIsInitialLoad(false);
-    }
-  }, [messages, shouldAutoScroll, isInitialLoad, messagesEndRef, setIsInitialLoad]);
+
 
   useEffect(() => {
     console.log("Messages updated:", messages.length);
@@ -233,7 +222,7 @@ const Chat = () => {
       />
 
 
-      
+
       {/* Footer - Fixed at bottom */}
 <div className={`border-t border-border/50 flex-shrink-0 ${sidebarCollapsed ? 'p-2 pb-safe' : 'p-3 pb-safe'}`}>
         {!sidebarCollapsed ? (
@@ -248,8 +237,8 @@ const Chat = () => {
                 </div>
               </>
             )}
-            
-            <Button 
+
+            <Button
               variant="outline"
               size="sm"
               onClick={() => navigate("/documents")}
@@ -259,7 +248,7 @@ const Chat = () => {
               Documents
             </Button>
 
-            <Button 
+            <Button
               variant="outline"
               size="sm"
               onClick={() => navigate("/pricing")}
@@ -281,9 +270,9 @@ const Chat = () => {
               </Button>
             )}
 
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleSignOut}
               className="w-full justify-start h-9 transition-all hover:bg-destructive/10 hover:border-destructive/30 hover:text-destructive hover:shadow-sm"
             >
@@ -325,9 +314,9 @@ const Chat = () => {
               </Button>
             )}
 
-            <Button 
-              variant="outline" 
-              size="sm" 
+            <Button
+              variant="outline"
+              size="sm"
               onClick={handleSignOut}
               className="w-12 h-10 p-0 transition-all hover:bg-destructive/10 hover:text-destructive flex items-center justify-center"
               title="Sign Out"
@@ -338,11 +327,11 @@ const Chat = () => {
         )}
       </div>
     </div>
-    
+
   );
 
   return (
-    <ResponsiveLayout 
+    <ResponsiveLayout
       sidebar={sidebar}
       sidebarCollapsed={sidebarCollapsed}
       onSidebarCollapsedChange={setSidebarCollapsed}
@@ -350,9 +339,13 @@ const Chat = () => {
     >
       <div className="flex flex-col h-full">
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto pb-36 md:pb-32 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto pb-36 md:pb-32 custom-scrollbar" ref={(el) => {
+          if (el && !scrollContainerRef.current) {
+            scrollContainerRef.current = el;
+          }
+        }}>
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-8">
-            {/* Conversation manager handles welcome messages and new conversation options, 
+            {/* Conversation manager handles welcome messages and new conversation options,
                  or returns null when regular messages should be displayed */}
             <ConversationManager
               initialMessages={messages}
@@ -367,7 +360,7 @@ const Chat = () => {
             />
             {/* Show messages when ConversationManager returns null (has no special UI to render) */}
             {messages.length > 0 && !isNavigatingToChatHook && (
-              <MessageList 
+              <MessageList
                 messages={messages}
                 isLoading={isLoading}
                 isNavigatingToChat={isNavigatingToChatHook}
@@ -381,15 +374,15 @@ const Chat = () => {
         {/* Input - Fixed footer with dynamic left offset */}
         <div className={`fixed bottom-0 left-0 right-0 border-t border-border/50 backdrop-blur-sm bg-card/95 shadow-lg z-30 transition-all duration-300 pb-safe ${sidebarCollapsed ? 'lg:left-20' : 'lg:left-80'}`}>
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-4">
-            <ChatInput 
-              onSend={handleSendMessage} 
-              disabled={isLoading || isNavigatingToChatHook} 
+            <ChatInput
+              onSend={handleSendMessage}
+              disabled={isLoading || isNavigatingToChatHook}
               mode={chatMode}
               onModeChange={setChatMode}
             />
             <p className="text-xs text-muted-foreground text-center mt-2">
-              {isNavigatingToChatHook && conversationHookId && messages.length === 0 
-                ? "Select an option above to continue" 
+              {isNavigatingToChatHook && conversationHookId && messages.length === 0
+                ? "Select an option above to continue"
                 : "Press Enter to send, Shift+Enter for new line"}
             </p>
           </div>
@@ -397,9 +390,9 @@ const Chat = () => {
       </div>
 
       {/* Upgrade Modal */}
-      <UpgradeModal 
-        open={hookShowUpgradeModal} 
-        onOpenChange={setHookShowUpgradeModal} 
+      <UpgradeModal
+        open={hookShowUpgradeModal}
+        onOpenChange={setHookShowUpgradeModal}
       />
     </ResponsiveLayout>
   );

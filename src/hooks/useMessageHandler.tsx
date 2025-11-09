@@ -173,7 +173,7 @@ export const useMessageHandler = ({
               // Fall back to optimistic update if fetch fails
               const assistantMessageObj: Message = { 
                 role: "assistant", 
-                content: retryResponseData.message || "No response received", 
+                content: typeof retryResponseData.message === 'string' ? retryResponseData.message : JSON.stringify(retryResponseData.message, null, 2) || "No response received", 
                 sources: retryResponseData.sources || [],
                 messageId: tempAssistantMessageId,
                 userId: user?.id
@@ -186,6 +186,7 @@ export const useMessageHandler = ({
               const loadedMessages: Message[] = newMessages.map(msg => ({
                 role: msg.role as "user" | "assistant",
                 content: msg.content,
+
                 sources: (msg.metadata as { sources?: any[] })?.sources || [],
                 messageId: msg.id,
                 userId: user?.id
@@ -255,7 +256,7 @@ export const useMessageHandler = ({
         // Fall back to optimistic update if fetch fails
         const assistantMessageObj: Message = { 
           role: "assistant", 
-          content: responseData.message || "No response received", 
+          content: typeof responseData.message === 'string' ? responseData.message : JSON.stringify(responseData.message, null, 2) || "No response received", 
           sources: responseData.sources || [],
           messageId: tempAssistantMessageId,
           userId: user?.id
@@ -268,6 +269,7 @@ export const useMessageHandler = ({
         const loadedMessages: Message[] = newMessages.map(msg => ({
           role: msg.role as "user" | "assistant",
           content: msg.content,
+
           sources: (msg.metadata as { sources?: any[] })?.sources || [],
           messageId: msg.id,
           userId: user?.id

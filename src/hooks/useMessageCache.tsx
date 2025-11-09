@@ -20,7 +20,9 @@ export const useMessageCache = (): UseMessageCacheReturn => {
   const deduplicateMessages = (msgs: Message[]): Message[] => {
     const seen = new Map<string, Message>();
     return msgs.filter((msg) => {
-      const key = msg.messageId || `${msg.role}-${msg.content}-${msg.userId}`;
+      // Make sure content is a string for the deduplication key
+      const contentString = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
+      const key = msg.messageId || `${msg.role}-${contentString}-${msg.userId || ''}`;
       if (seen.has(key)) {
         console.log("🚫 Duplicate message detected and removed:", key);
         return false;

@@ -30,10 +30,9 @@ export const MessageList = ({
   return (
     <>
       {deduplicateMessages(messages).map((message, index, arr) => (
-        <ChatMessage 
-          key={message.messageId || `msg-${index}-${message.role}`} 
-          {...message} 
-          isNew={index === arr.length - 1}
+        <ChatMessage
+          key={message.messageId || `msg-${index}-${message.role}`}
+          {...message}
           isStreaming={isLoading && index === arr.length - 1 && message.role === 'assistant'}
           onSuggestionClick={onSuggestionClick}
         />

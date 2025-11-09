@@ -19,6 +19,8 @@ interface UseConversationManagerProps {
   onIsLoadingConversationUpdate: (loading: boolean) => void;
   onShowWelcomeMessageUpdate: (show: boolean) => void;
   onIsNavigatingToChatUpdate: (navigating: boolean) => void;
+  onSetShouldAutoScroll?: (shouldAutoScroll: boolean) => void;
+  onSetIsUserScrolling?: (isUserScrolling: boolean) => void;
 }
 
 export const useConversationManager = ({
@@ -28,7 +30,9 @@ export const useConversationManager = ({
   onConversationIdUpdate,
   onIsLoadingConversationUpdate,
   onShowWelcomeMessageUpdate,
-  onIsNavigatingToChatUpdate
+  onIsNavigatingToChatUpdate,
+  onSetShouldAutoScroll,
+  onSetIsUserScrolling
 }: UseConversationManagerProps) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -325,6 +329,14 @@ export const useConversationManager = ({
       
       // Update ref to track current conversation
       prevConversationIdRef.current = newConversationId;
+
+      // Reset scroll state for loaded conversation (instant scroll to bottom)
+      if (onSetShouldAutoScroll) {
+        onSetShouldAutoScroll(false); // Disable auto-scroll for loaded conversations
+      }
+      if (onSetIsUserScrolling) {
+        onSetIsUserScrolling(false); // Reset user scrolling state
+      }
 
     } catch (error) {
       console.error("Error loading conversation:", error);

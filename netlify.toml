@@ -1,0 +1,26 @@
+[build]
+  # Directory to change to before starting a build
+  base = "/"
+  
+  # Directory that contains the deploy-ready HTML files and assets
+  publish = "public"
+  
+
+[build.environment]
+  # Set Node.js version
+  NODE_VERSION = "22.12.0"
+
+# Redirect rules
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer-when-downgrade"

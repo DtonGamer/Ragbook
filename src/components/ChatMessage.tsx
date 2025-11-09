@@ -114,7 +114,7 @@ export const ChatMessage = memo(({
             <div className="flex-1 prose prose-sm dark:prose-invert max-w-none">
               {isUser ? (
                 <p className="text-[15px] sm:text-sm leading-relaxed whitespace-pre-wrap break-words m-0">
-                  {content}
+                  {typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
                 </p>
               ) : (
                 <ReactMarkdown
@@ -139,7 +139,7 @@ export const ChatMessage = memo(({
                     ),
                   }}
                 >
-                  {content}
+                  {typeof content === 'string' ? content : JSON.stringify(content, null, 2)}
                 </ReactMarkdown>
               )}
             </div>
@@ -189,7 +189,7 @@ export const ChatMessage = memo(({
             
             <div className={cn(
               "flex flex-wrap gap-1.5 transition-all duration-300 overflow-hidden",
-              showSuggestions ? "max-h-40 opacity-100" : "max-h-10 opacity-90"
+              showSuggestions ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
             )}>
               {sources
                 .flatMap(s => s.suggestions || [])
