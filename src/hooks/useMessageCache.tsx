@@ -10,9 +10,9 @@ interface Message {
 
 interface UseMessageCacheReturn {
   deduplicateMessages: (msgs: Message[]) => Message[];
-  cacheMessages: (conversationId: string, messages: Message[]) => void;
-  getCachedMessages: (conversationId: string) => Message[] | null;
-  clearCache: (conversationId: string) => void;
+  cacheMessages: (conversationId: string, messages: Message[], userId?: string) => void;
+  getCachedMessages: (conversationId: string, userId?: string) => Message[] | null;
+  clearCache: (conversationId: string, userId?: string) => void;
 }
 
 export const useMessageCache = (): UseMessageCacheReturn => {
@@ -32,17 +32,27 @@ export const useMessageCache = (): UseMessageCacheReturn => {
     });
   };
 
-  const cacheMessages = (conversationId: string, messages: Message[]) => {
+  const cacheMessages = (conversationId: string, messages: Message[], userId?: string) => {
     try {
-      sessionStorage.setItem(`chat:${conversationId}`, JSON.stringify(messages));
+      // Use localStorage with user-specific key if userId is provided
+      const cacheKey = userId ? `chat:${userId}:${conversationId}` : `chat:${conversationId}`;
+      localStorage.setItem(cacheKey, JSON.stringify(messages));
     } catch (e) {
       console.warn("Failed to cache messages:", e);
     }
   };
 
-  const getCachedMessages = (conversationId: string): Message[] | null => {
+  const getCachedMessages = (conversationId: string, userId?: string): Message[] | null => {
     try {
-      const cached = sessionStorage.getItem(`chat:${conversationId}`);
+      // Try user-specific cache first
+      if (userId) {
+        const userCached = localStorage.getItem(`chat:${userId}:${conversationId}`);
+        if (userCached) {
+          return JSON.parse(userCached);
+        }
+      }
+      // Fallback to old key for compatibility
+      const cached = localStorage.getItem(`chat:${conversationId}`);
       if (cached) {
         return JSON.parse(cached);
       }
@@ -52,9 +62,14 @@ export const useMessageCache = (): UseMessageCacheReturn => {
     return null;
   };
 
-  const clearCache = (conversationId: string) => {
+  const clearCache = (conversationId: string, userId?: string) => {
     try {
-      sessionStorage.removeItem(`chat:${conversationId}`);
+      // Clear user-specific cache if userId is provided
+      if (userId) {
+        localStorage.removeItem(`chat:${userId}:${conversationId}`);
+      }
+      // Also clear old key for compatibility
+      localStorage.removeItem(`chat:${conversationId}`);
     } catch (e) {
       console.error("Cache clearing error:", e);
     }

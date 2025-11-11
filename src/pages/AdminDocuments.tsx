@@ -10,7 +10,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, Search, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -32,7 +32,7 @@ interface AdminDocument {
 
 export default function AdminDocuments() {
   const navigate = useNavigate();
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuthContext();
   const [documents, setDocuments] = useState<AdminDocument[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);

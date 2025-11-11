@@ -6,7 +6,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import { CreditCard, Crown, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -25,7 +25,7 @@ export const CreditUpgradePrompt = ({
   onUpgrade 
 }: CreditUpgradePromptProps) => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { creditsLeft, creditsMax, isPro } = useSubscription();
   const [isProcessing, setIsProcessing] = useState(false);
 

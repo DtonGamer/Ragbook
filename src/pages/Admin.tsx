@@ -1,7 +1,7 @@
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, CreditCard, FileText, Users } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -36,7 +36,7 @@ interface Conversation {
 
 export default function Admin() {
   const navigate = useNavigate();
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuthContext();
   const [stats, setStats] = useState<Stat[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [statsLoading, setStatsLoading] = useState(true);

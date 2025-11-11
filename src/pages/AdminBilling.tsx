@@ -10,7 +10,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { supabase } from "@/integrations/supabase/client";
 import { ArrowLeft, CreditCard, TrendingUp, TrendingDown } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -50,7 +50,7 @@ interface UserRole {
 
 export default function AdminBilling() {
   const navigate = useNavigate();
-  const { user, isAdmin, loading } = useAuth();
+  const { user, isAdmin, loading } = useAuthContext();
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [revenueStats, setRevenueStats] = useState({
     totalRevenue: 0,

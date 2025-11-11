@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "./useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { useSubscription } from "./useSubscription";
 import { toast } from "sonner";
 
@@ -27,10 +27,10 @@ export const useMessageHandler = ({
   setIsLoading,
   refreshSubscription
 }: UseMessageHandlerProps) => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { creditsLeft, isPro } = useSubscription();
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
-  
+
   const createConversation = async () => {
     if (!user) return null;
 
@@ -49,7 +49,7 @@ export const useMessageHandler = ({
     try {
       localStorage.setItem("lastConversationId", data.id);
     } catch {}
-    
+
     return data.id;
   };
 
@@ -57,7 +57,7 @@ export const useMessageHandler = ({
     console.log("🚀 Starting handleSendMessage with mode:", mode);
 
     let currentConversationId = conversationId;
-    
+
     // If no conversation ID, create a new one
     if (!currentConversationId) {
       currentConversationId = await createConversation();
@@ -82,13 +82,13 @@ export const useMessageHandler = ({
     const tempUserMessageId = `temp-user-${Date.now()}`;
     const tempAssistantMessageId = `temp-assistant-${Date.now()}`;
 
-    const optimisticUserMessage: Message = { 
-      role: "user", 
-      content, 
+    const optimisticUserMessage: Message = {
+      role: "user",
+      content,
       messageId: tempUserMessageId,
-      userId: user?.id 
+      userId: user?.id
     };
-    
+
     console.log("✅ Adding optimistic user message");
     setMessages(prev => [...prev, optimisticUserMessage]);
 
@@ -97,27 +97,27 @@ export const useMessageHandler = ({
     try {
       const { data: { session: refreshedSession }, error: refreshError } = await supabase.auth.refreshSession();
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
+
       if (refreshError) {
         console.error("Session refresh error:", refreshError);
       }
-      
+
       if (sessionError) {
         console.error("Session error:", sessionError);
         throw new Error("Session error: " + sessionError.message);
       }
-      
+
       const currentSession = refreshedSession || session;
       if (!currentSession) throw new Error("Not authenticated");
 
       const requestBody = {
         message: content,
-        conversationId: currentConversationId, // Use the potentially updated conversation ID
-        mode,  // Add the mode to the request body
+        conversationId: currentConversationId,
+        mode,
       };
-      
+
       const fnUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/rag-chat-credits`;
-      
+
       console.log('📤 Sending request to rag-chat-credits with mode:', mode);
 
       const response = await fetch(fnUrl, {
@@ -137,7 +137,7 @@ export const useMessageHandler = ({
           if (newConversationId) {
             // Retry the request with the new conversation ID
             requestBody.conversationId = newConversationId;
-            
+
             const retryResponse = await fetch(fnUrl, {
               method: "POST",
               headers: {
@@ -161,45 +161,70 @@ export const useMessageHandler = ({
               await refreshSubscription();
             }
 
-            // Fetch fresh messages from database to ensure consistency
-            const { data: newMessages, error: fetchError } = await supabase
+            // Fetch only the most recent messages to get the actual user message with its real ID
+            const { data: recentMessages, error: fetchError } = await supabase
               .from("messages")
               .select("*")
               .eq("conversation_id", newConversationId)
-              .order("created_at", { ascending: true });
+              .order("created_at", { ascending: false })
+              .limit(2); // Get the last 2 messages (user + assistant)
 
-            if (fetchError) {
-              console.error("Error fetching updated messages:", fetchError);
-              // Fall back to optimistic update if fetch fails
-              const assistantMessageObj: Message = { 
-                role: "assistant", 
-                content: typeof retryResponseData.message === 'string' ? retryResponseData.message : JSON.stringify(retryResponseData.message, null, 2) || "No response received", 
-                sources: retryResponseData.sources || [],
-                messageId: tempAssistantMessageId,
+            if (fetchError || !recentMessages || recentMessages.length < 1) {
+              // Fallback: create messages from response data
+              const userMessageFromOptimistic: Message = {
+                role: "user",
+                content: content,
+                messageId: `db-user-${Date.now()}`,
                 userId: user?.id
               };
+              
+              const assistantMessageObj: Message = {
+                role: "assistant",
+                content: typeof retryResponseData.message === 'string' ? retryResponseData.message : JSON.stringify(retryResponseData.message, null, 2) || "No response received",
+                sources: retryResponseData.sources || [],
+                messageId: `server-assistant-${Date.now()}`,
+                userId: user?.id
+              };
+
               setMessages(prev => {
-                return [...prev.filter(m => m.messageId !== tempUserMessageId), assistantMessageObj];
+                const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+                return [...filteredMessages, userMessageFromOptimistic, assistantMessageObj];
               });
             } else {
-              // Load fresh messages from database
-              const loadedMessages: Message[] = newMessages.map(msg => ({
-                role: msg.role as "user" | "assistant",
-                content: msg.content,
+              // Sort messages by created_at to ensure correct order
+              const sortedMessages: Message[] = recentMessages
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                .map(msg => ({
+                  role: msg.role as "user" | "assistant",
+                  content: msg.content,
+                  sources: (msg.metadata as { sources?: any[] })?.sources || [],
+                  messageId: msg.id,
+                  userId: user?.id
+                }));
 
-                sources: (msg.metadata as { sources?: any[] })?.sources || [],
-                messageId: msg.id,
-                userId: user?.id
-              }));
+              // Check if assistant message is already in DB results
+              const hasAssistantResponse = sortedMessages.some(msg => msg.role === 'assistant');
 
-              console.log("✅ Replacing with fresh messages from DB (retry):", loadedMessages.length);
-              setMessages(loadedMessages);
-              
-              // Update cache
-              try {
-                sessionStorage.setItem(`chat:${newConversationId}`, JSON.stringify(loadedMessages));
-              } catch (e) {
-                console.warn("Failed to update cache:", e);
+              if (hasAssistantResponse) {
+                // DB already has the assistant message, just use DB messages
+                setMessages(prev => {
+                  const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+                  return [...filteredMessages, ...sortedMessages];
+                });
+              } else {
+                // DB doesn't have assistant message yet, add it from server response
+                const assistantMessageObj: Message = {
+                  role: "assistant",
+                  content: typeof retryResponseData.message === 'string' ? retryResponseData.message : JSON.stringify(retryResponseData.message, null, 2) || "No response received",
+                  sources: retryResponseData.sources || [],
+                  messageId: `server-assistant-${Date.now()}`,
+                  userId: user?.id
+                };
+
+                setMessages(prev => {
+                  const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+                  return [...filteredMessages, ...sortedMessages, assistantMessageObj];
+                });
               }
             }
             return; // Successfully handled with retry
@@ -207,11 +232,10 @@ export const useMessageHandler = ({
             throw new Error("Failed to create a new conversation after 'not found' error");
           }
         }
-        
+
         if (response.status === 401) {
           toast.error("Your session expired. Please sign in again.");
           await supabase.auth.signOut({ scope: 'local' });
-          // Note: Navigation needs to be handled by parent component
           return;
         }
         if (response.status === 429) {
@@ -244,45 +268,70 @@ export const useMessageHandler = ({
         await refreshSubscription();
       }
 
-      // Fetch fresh messages from database to ensure consistency
-      const { data: newMessages, error: fetchError } = await supabase
+      // Fetch only the most recent messages to get the actual user message with its real ID
+      const { data: recentMessages, error: fetchError } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", currentConversationId)
-        .order("created_at", { ascending: true });
+        .order("created_at", { ascending: false })
+        .limit(2); // Get the last 2 messages (user + assistant)
 
-      if (fetchError) {
-        console.error("Error fetching updated messages:", fetchError);
-        // Fall back to optimistic update if fetch fails
-        const assistantMessageObj: Message = { 
-          role: "assistant", 
-          content: typeof responseData.message === 'string' ? responseData.message : JSON.stringify(responseData.message, null, 2) || "No response received", 
-          sources: responseData.sources || [],
-          messageId: tempAssistantMessageId,
+      if (fetchError || !recentMessages || recentMessages.length < 1) {
+        // Fallback: create messages from response data
+        const userMessageFromOptimistic: Message = {
+          role: "user",
+          content: content,
+          messageId: `db-user-${Date.now()}`,
           userId: user?.id
         };
+        
+        const assistantMessageObj: Message = {
+          role: "assistant",
+          content: typeof responseData.message === 'string' ? responseData.message : JSON.stringify(responseData.message, null, 2) || "No response received",
+          sources: responseData.sources || [],
+          messageId: `server-assistant-${Date.now()}`,
+          userId: user?.id
+        };
+
         setMessages(prev => {
-          return [...prev.filter(m => m.messageId !== tempUserMessageId), assistantMessageObj];
+          const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+          return [...filteredMessages, userMessageFromOptimistic, assistantMessageObj];
         });
       } else {
-        // Load fresh messages from database
-        const loadedMessages: Message[] = newMessages.map(msg => ({
-          role: msg.role as "user" | "assistant",
-          content: msg.content,
+        // Sort messages by created_at to ensure correct order
+        const sortedMessages: Message[] = recentMessages
+          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+          .map(msg => ({
+            role: msg.role as "user" | "assistant",
+            content: msg.content,
+            sources: (msg.metadata as { sources?: any[] })?.sources || [],
+            messageId: msg.id,
+            userId: user?.id
+          }));
 
-          sources: (msg.metadata as { sources?: any[] })?.sources || [],
-          messageId: msg.id,
-          userId: user?.id
-        }));
+        // Check if assistant message is already in DB results
+        const hasAssistantResponse = sortedMessages.some(msg => msg.role === 'assistant');
 
-        console.log("✅ Replacing with fresh messages from DB:", loadedMessages.length);
-        setMessages(loadedMessages);
-        
-        // Update cache
-        try {
-          sessionStorage.setItem(`chat:${currentConversationId}`, JSON.stringify(loadedMessages));
-        } catch (e) {
-          console.warn("Failed to update cache:", e);
+        if (hasAssistantResponse) {
+          // DB already has the assistant message, just use DB messages
+          setMessages(prev => {
+            const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+            return [...filteredMessages, ...sortedMessages];
+          });
+        } else {
+          // DB doesn't have assistant message yet, add it from server response
+          const assistantMessageObj: Message = {
+            role: "assistant",
+            content: typeof responseData.message === 'string' ? responseData.message : JSON.stringify(responseData.message, null, 2) || "No response received",
+            sources: responseData.sources || [],
+            messageId: `server-assistant-${Date.now()}`,
+            userId: user?.id
+          };
+
+          setMessages(prev => {
+            const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
+            return [...filteredMessages, ...sortedMessages, assistantMessageObj];
+          });
         }
       }
 

@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ArrowLeft, Check, Crown, Zap, Sparkles } from "lucide-react";
 import { useState, useEffect } from "react";
@@ -24,7 +24,7 @@ declare global {
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const { subscription, isPro, creditsLeft, creditsMax, refreshSubscription } = useSubscription();
   const [isProcessing, setIsProcessing] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);

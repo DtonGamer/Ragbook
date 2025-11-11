@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "./useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { toast } from "sonner";
 
 interface Message {
@@ -34,7 +34,7 @@ export const useConversationManager = ({
   onSetShouldAutoScroll,
   onSetIsUserScrolling
 }: UseConversationManagerProps) => {
-  const { user } = useAuth();
+  const { user } = useAuthContext();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [conversationId, setConversationId] = useState<string | null>(initialConversationId);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
@@ -44,11 +44,16 @@ export const useConversationManager = ({
   const loadingRef = useRef<boolean>(false);
   const prevConversationIdRef = useRef<string | null>(null);
   const isLoadingConversationRef = useRef(false);
+  const initializedRef = useRef(false); // Track if initialization has already occurred
 
-  // Initialize conversation state
+  // Initialize conversation state - only run once per user session
   useEffect(() => {
-    if (!user) return;
+    // Skip if no user or if already initialized
+    if (!user || initializedRef.current) return;
 
+    initializedRef.current = true; // Mark as initialized
+    
+    const initializeConversation = async () => {
     // Prevent running multiple times
     if (isLoadingConversationRef.current) {
       console.log("⏸️ Already loading initial conversation, skipping");
@@ -77,18 +82,55 @@ export const useConversationManager = ({
 
     // Check if this is likely a new conversation by seeing if there's no cache for it
     // A new conversation that was just created won't have cached messages yet
-    const hasCachedMessages = lastId ? !!sessionStorage.getItem(`chat:${lastId}`) : false;
+    const hasCachedMessages = lastId ? !!localStorage.getItem(user ? `chat:${user.id}:${lastId}` : `chat:${lastId}`) : false;
     
     // If there's a previous conversation ID and no messages yet
     if (lastId && messages.length === 0) {
-      // If there are cached messages for this conversation, it's an existing one, show welcome options
-      // If there are no cached messages, it might be a new conversation or one that hasn't been loaded yet
+      // If there are cached messages for this conversation, load them directly instead of showing welcome options
       if (hasCachedMessages) {
-        setIsNavigatingToChat(true);
         setConversationId(lastId);
-        onIsNavigatingToChatUpdate(true);
         onConversationIdUpdate(lastId);
-      } else {
+        
+        try {
+          // Try user-specific cache first
+          let cached = user ? localStorage.getItem(`chat:${user.id}:${lastId}`) : null;
+          if (!cached) {
+            // Fallback to old format for compatibility
+            cached = localStorage.getItem(`chat:${lastId}`);
+          }
+          
+          if (cached) {
+            const cachedMessages: Message[] = JSON.parse(cached);
+            if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
+              setMessages(cachedMessages);
+              onMessagesUpdate(cachedMessages);
+              // Directly show the messages without showing welcome options
+              setIsNavigatingToChat(false);
+              onIsNavigatingToChatUpdate(false);
+              setShowWelcomeMessage(false);
+              onShowWelcomeMessageUpdate(false);
+              console.log("⚡ Loaded cached messages for conversation:", lastId);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Cache load error:", e);
+        }
+        
+        // If we couldn't load from cache, we should load from DB instead of showing welcome options
+        if (user) {
+          setIsNavigatingToChat(false);
+          onIsNavigatingToChatUpdate(false);
+          loadConversation(lastId);
+        } else {
+          // If no user, preserve the conversation ID but don't load from DB
+          setConversationId(lastId);
+          onConversationIdUpdate(lastId);
+          setIsNavigatingToChat(false);
+          onIsNavigatingToChatUpdate(false);
+        }
+      } else if (user) {
+        // Only try to load from DB if user is authenticated
         // For conversations with no cached messages, we need to load from DB to determine if it's new
         // We'll initially set the conversation ID and let the loadConversation handle the rest
         setConversationId(lastId);
@@ -96,8 +138,15 @@ export const useConversationManager = ({
         // Don't set isNavigatingToChat to true yet - we'll decide after loading
         setIsNavigatingToChat(false);
         onIsNavigatingToChatUpdate(false);
+      } else {
+        // If no user, preserve the conversation ID but don't load from DB
+        setConversationId(lastId);
+        onConversationIdUpdate(lastId);
+        setIsNavigatingToChat(false);
+        onIsNavigatingToChatUpdate(false);
       }
-    } else if (!conversationId && !isLoadingConversation && !loadingRef.current) {
+    } else if (!conversationId && !isLoadingConversation && !loadingRef.current && user) {
+      // Only create a new conversation if user is authenticated
       console.log("🆕 No conversation found, creating new one");
       setIsNavigatingToChat(false);
       onIsNavigatingToChatUpdate(false);
@@ -105,13 +154,52 @@ export const useConversationManager = ({
     } else if (conversationId && messages.length === 0 && !isLoadingConversation) {
       // If we have a conversation ID but still no messages after loading, 
       // determine based on whether it has cached messages
-      const hasCachedMessagesCurrent = conversationId ? !!sessionStorage.getItem(`chat:${conversationId}`) : false;
+      const hasCachedMessagesCurrent = conversationId ? !!localStorage.getItem(user ? `chat:${user.id}:${conversationId}` : `chat:${conversationId}`) : false;
       if (hasCachedMessagesCurrent) {
-        // This is an existing conversation that we tried to load but has no messages
-        setIsNavigatingToChat(true);
-        onIsNavigatingToChatUpdate(true);
-      } else {
+        // This is an existing conversation - load from cache instead of showing welcome options
+        try {
+          // Try user-specific cache first
+          let cached = user ? localStorage.getItem(`chat:${user.id}:${conversationId}`) : null;
+          if (!cached) {
+            // Fallback to old format for compatibility
+            cached = localStorage.getItem(`chat:${conversationId}`);
+          }
+          
+          if (cached) {
+            const cachedMessages: Message[] = JSON.parse(cached);
+            if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
+              setMessages(cachedMessages);
+              onMessagesUpdate(cachedMessages);
+              // Directly show the messages without showing welcome options
+              setIsNavigatingToChat(false);
+              onIsNavigatingToChatUpdate(false);
+              setShowWelcomeMessage(false);
+              onShowWelcomeMessageUpdate(false);
+              console.log("⚡ Loaded cached messages for current conversation:", conversationId);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Cache load error:", e);
+        }
+        
+        // If we couldn't load from cache, load from DB
+        if (user) {
+          setIsNavigatingToChat(false);
+          onIsNavigatingToChatUpdate(false);
+          loadConversation(conversationId);
+        } else {
+          // If no user, don't attempt to load from DB - preserve existing state
+          setIsNavigatingToChat(false);
+          onIsNavigatingToChatUpdate(false);
+        }
+      } else if (user) {
+        // Only attempt to load from DB if user is authenticated
         // Likely a new conversation with no messages yet
+        setIsNavigatingToChat(false);
+        onIsNavigatingToChatUpdate(false);
+      } else {
+        // If no user, don't attempt to load from DB - preserve existing state
         setIsNavigatingToChat(false);
         onIsNavigatingToChatUpdate(false);
       }
@@ -119,6 +207,9 @@ export const useConversationManager = ({
       setIsNavigatingToChat(false);
       onIsNavigatingToChatUpdate(false);
     }
+    };
+
+    initializeConversation();
   }, [user]); // Only depend on user
 
   // Effect to handle when conversation is updated (to turn off navigation loading state)
@@ -255,7 +346,13 @@ export const useConversationManager = ({
 
     try {
       // Check cache first for instant loading
-      const cached = sessionStorage.getItem(`chat:${newConversationId}`);
+      // Try user-specific cache first
+      let cached = user ? localStorage.getItem(`chat:${user.id}:${newConversationId}`) : null;
+      if (!cached) {
+        // Fallback to old format for compatibility
+        cached = localStorage.getItem(`chat:${newConversationId}`);
+      }
+      
       if (cached && !clearMessages) {
         try {
           const cachedMessages: Message[] = JSON.parse(cached);
@@ -322,7 +419,13 @@ export const useConversationManager = ({
       
       // Cache for next time
       try {
-        sessionStorage.setItem(`chat:${newConversationId}`, JSON.stringify(loadedMessages));
+        // Store in user-specific location if user exists
+        if (user) {
+          localStorage.setItem(`chat:${user.id}:${newConversationId}`, JSON.stringify(loadedMessages));
+        } else {
+          // Fallback to non-user specific for compatibility
+          localStorage.setItem(`chat:${newConversationId}`, JSON.stringify(loadedMessages));
+        }
       } catch (e) {
         console.warn("Failed to cache messages:", e);
       }

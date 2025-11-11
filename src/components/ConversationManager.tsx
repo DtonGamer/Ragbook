@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Bot, Plus } from "lucide-react";
 import { useConversationManager } from "@/hooks/useConversationManager";
@@ -37,7 +37,7 @@ export const ConversationManager = ({
   onNewConversation
 }: ConversationManagerProps) => {
   const navigate = useNavigate();
-  const { user, signOut } = useAuth();
+  const { user, signOut } = useAuthContext();
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
   
   const {

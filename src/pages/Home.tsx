@@ -1,11 +1,11 @@
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { Bot } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user } = useAuthContext();
 
   return (
     <div className="min-h-[100svh] flex flex-col bg-background safe-top safe-bottom overflow-x-hidden overflow-y-hidden md:overflow-y-visible">

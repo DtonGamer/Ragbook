@@ -2,7 +2,7 @@ import { ChatInput } from "@/components/ChatInput";
 import { ChatMessage } from "@/components/ChatMessage";
 import { CreditsDisplay } from "@/components/CreditsDisplay";
 import { ResponsiveLayout } from "@/components/ResponsiveLayout";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthContext } from "@/contexts/AuthProvider";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
@@ -30,27 +30,13 @@ interface Message {
 
 const Chat = () => {
   const navigate = useNavigate();
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, signOut } = useAuthContext();
   const { isPro, creditsLeft, refreshSubscription } = useSubscription();
 
   // Enhanced state initialization to prevent welcome message flash
   const [messages, setMessages] = useState<Message[]>(() => {
     // On mount, immediately check if we have a cached conversation
-    try {
-      const lastId = localStorage.getItem("lastConversationId");
-      if (lastId) {
-        const cached = sessionStorage.getItem(`chat:${lastId}`);
-        if (cached) {
-          const cachedMessages: Message[] = JSON.parse(cached);
-          if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
-            console.log("⚡ Initial state: Using cached messages");
-            return cachedMessages;
-          }
-        }
-      }
-    } catch (e) {
-      console.error("Initial cache check error:", e);
-    }
+    // We'll initialize with an empty array and load properly in useEffect
     return [];
   });
 
@@ -193,6 +179,33 @@ const Chat = () => {
       }
     }
   }, [conversationId]);
+
+  // Load cached messages when user is available
+  useEffect(() => {
+    if (user) {
+      // On mount, immediately check if we have a cached conversation
+      try {
+        const lastId = localStorage.getItem("lastConversationId");
+        if (lastId) {
+          // Try user-specific cache first
+          let cached = localStorage.getItem(`chat:${user.id}:${lastId}`);
+          if (!cached) {
+            // Fallback to old format for compatibility
+            cached = localStorage.getItem(`chat:${lastId}`);
+          }
+          if (cached) {
+            const cachedMessages: Message[] = JSON.parse(cached);
+            if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
+              console.log("⚡ Initial state: Using cached messages");
+              setMessages(cachedMessages);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Initial cache check error:", e);
+      }
+    }
+  }, [user]);
 
   // For now, keep the conversation management functions in the main component
   // for backward compatibility with existing code

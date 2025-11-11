@@ -10,7 +10,7 @@ interface AuthState {
   isAdmin: boolean;
 }
 
-interface UseAuthReturn extends AuthState {
+export interface UseAuthReturn extends AuthState {
   signOut: () => Promise<void>;
   refreshSession: () => Promise<void>;
   checkAdminStatus: () => Promise<void>;
@@ -187,7 +187,8 @@ export const useAuth = (): UseAuthReturn => {
       async (event, session) => {
         if (!mounted) return;
 
-        console.log('Auth state changed:', event, session?.user?.id);
+       console.log('Auth state changed:', event, session?.user?.id, new Date().toISOString());
+console.trace(); // This will show you the call stack
         
         // Handle sign out events properly
         if (event === 'SIGNED_OUT') {
@@ -247,10 +248,11 @@ export const useAuth = (): UseAuthReturn => {
       if (timeSinceActivity > SESSION_TIMEOUT_MS || now >= expiresAt) {
         console.log('Session expired due to inactivity');
         toast.error('Session expired due to inactivity. Please sign in again.');
-        const { error } = await supabase.auth.signOut();
-        if (error) {
-          console.error('Sign out error:', error);
-        }
+        // Don't automatically sign out - let user explicitly sign out or refresh session
+        // const { error } = await supabase.auth.signOut();
+        // if (error) {
+        //   console.error('Sign out error:', error);
+        // }
       }
     }, SESSION_TIMEOUT_MS);
 
