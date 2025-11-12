@@ -58,7 +58,7 @@ export const useMessageHandler = ({
 
     let currentConversationId = conversationId;
 
-    // If no conversation ID, create a new one
+    // If no conversation ID, create a new one (first message in a new session)
     if (!currentConversationId) {
       currentConversationId = await createConversation();
       if (!currentConversationId) {
@@ -161,13 +161,12 @@ export const useMessageHandler = ({
               await refreshSubscription();
             }
 
-            // Fetch only the most recent messages to get the actual user message with its real ID
+            // Fetch messages in chronological order to ensure proper sequence
             const { data: recentMessages, error: fetchError } = await supabase
               .from("messages")
               .select("*")
               .eq("conversation_id", newConversationId)
-              .order("created_at", { ascending: false })
-              .limit(2); // Get the last 2 messages (user + assistant)
+              .order("created_at", { ascending: true });
 
             if (fetchError || !recentMessages || recentMessages.length < 1) {
               // Fallback: create messages from response data
@@ -191,9 +190,8 @@ export const useMessageHandler = ({
                 return [...filteredMessages, userMessageFromOptimistic, assistantMessageObj];
               });
             } else {
-              // Sort messages by created_at to ensure correct order
-              const sortedMessages: Message[] = recentMessages
-                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+              // Messages are already in correct chronological order
+              const orderedMessages: Message[] = recentMessages
                 .map(msg => ({
                   role: msg.role as "user" | "assistant",
                   content: msg.content,
@@ -203,13 +201,13 @@ export const useMessageHandler = ({
                 }));
 
               // Check if assistant message is already in DB results
-              const hasAssistantResponse = sortedMessages.some(msg => msg.role === 'assistant');
+              const hasAssistantResponse = orderedMessages.some(msg => msg.role === 'assistant');
 
               if (hasAssistantResponse) {
                 // DB already has the assistant message, just use DB messages
                 setMessages(prev => {
                   const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
-                  return [...filteredMessages, ...sortedMessages];
+                  return [...filteredMessages, ...orderedMessages];
                 });
               } else {
                 // DB doesn't have assistant message yet, add it from server response
@@ -223,7 +221,7 @@ export const useMessageHandler = ({
 
                 setMessages(prev => {
                   const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
-                  return [...filteredMessages, ...sortedMessages, assistantMessageObj];
+                  return [...filteredMessages, ...orderedMessages, assistantMessageObj];
                 });
               }
             }
@@ -268,13 +266,12 @@ export const useMessageHandler = ({
         await refreshSubscription();
       }
 
-      // Fetch only the most recent messages to get the actual user message with its real ID
+      // Fetch messages in chronological order to ensure proper sequence
       const { data: recentMessages, error: fetchError } = await supabase
         .from("messages")
         .select("*")
         .eq("conversation_id", currentConversationId)
-        .order("created_at", { ascending: false })
-        .limit(2); // Get the last 2 messages (user + assistant)
+        .order("created_at", { ascending: true });
 
       if (fetchError || !recentMessages || recentMessages.length < 1) {
         // Fallback: create messages from response data
@@ -298,9 +295,8 @@ export const useMessageHandler = ({
           return [...filteredMessages, userMessageFromOptimistic, assistantMessageObj];
         });
       } else {
-        // Sort messages by created_at to ensure correct order
-        const sortedMessages: Message[] = recentMessages
-          .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        // Messages are already in correct chronological order
+        const orderedMessages: Message[] = recentMessages
           .map(msg => ({
             role: msg.role as "user" | "assistant",
             content: msg.content,
@@ -310,13 +306,13 @@ export const useMessageHandler = ({
           }));
 
         // Check if assistant message is already in DB results
-        const hasAssistantResponse = sortedMessages.some(msg => msg.role === 'assistant');
+        const hasAssistantResponse = orderedMessages.some(msg => msg.role === 'assistant');
 
         if (hasAssistantResponse) {
           // DB already has the assistant message, just use DB messages
           setMessages(prev => {
             const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
-            return [...filteredMessages, ...sortedMessages];
+            return [...filteredMessages, ...orderedMessages];
           });
         } else {
           // DB doesn't have assistant message yet, add it from server response
@@ -330,7 +326,7 @@ export const useMessageHandler = ({
 
           setMessages(prev => {
             const filteredMessages = prev.filter(m => m.messageId !== tempUserMessageId);
-            return [...filteredMessages, ...sortedMessages, assistantMessageObj];
+            return [...filteredMessages, ...orderedMessages, assistantMessageObj];
           });
         }
       }

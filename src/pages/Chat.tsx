@@ -33,37 +33,7 @@ const Chat = () => {
   const { user, isAdmin, signOut } = useAuthContext();
   const { isPro, creditsLeft, refreshSubscription } = useSubscription();
 
-  // Enhanced state initialization to prevent welcome message flash
-  const [messages, setMessages] = useState<Message[]>(() => {
-    // On mount, immediately check if we have a cached conversation
-    // We'll initialize with an empty array and load properly in useEffect
-    return [];
-  });
-
   const [isLoading, setIsLoading] = useState(false);
-  const [chatMode, setChatMode] = useState<"auto" | "document" | "general">("auto");
-
-  const [conversationId, setConversationId] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem("lastConversationId");
-    } catch {
-      return null;
-    }
-  });
-
-  const [showWelcomeMessage, setShowWelcomeMessage] = useState(() => {
-    try {
-      const lastId = localStorage.getItem("lastConversationId");
-      // Only show welcome if no conversation exists
-      return !lastId;
-    } catch {
-      return false;
-    }
-  });
-
-  const [isLoadingConversation, setIsLoadingConversation] = useState(false);
-  // showUpgradeModal state is now managed by the useMessageHandler hook
-  // const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   // Note: In the refactored version, we don't need sidebar refresh trigger
@@ -72,7 +42,23 @@ const Chat = () => {
   // We can still use it if needed for other reasons
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
 
-  // Use the new hooks
+  // Use the conversation manager hook to handle conversation logic first
+  const {
+    messages: conversationMessages,
+    setMessages,
+    conversationId: conversationHookId,
+    setConversationId,
+    isLoadingConversation: isLoadingConversationHook,
+    showWelcomeMessage: showWelcomeMessageHook,
+    setShowWelcomeMessage,
+    isCreatingNew: isCreatingNewHook,
+    loadConversation,
+    handleNewConversation,
+  } = useConversationManager({
+    onSidebarRefresh: () => setSidebarRefreshTrigger(prev => prev + 1)
+  });
+
+  // Use the new hooks after getting the required variables
   const {
     messagesEndRef,
     scrollContainerRef,
@@ -84,39 +70,7 @@ const Chat = () => {
     setIsUserScrolling,
     sidebarCollapsed: hookSidebarCollapsed,
     setSidebarCollapsed: setHookSidebarCollapsed
-  } = useScrollBehavior({ messages });
-
-  // Use the conversation manager hook to handle conversation logic
-  const conversationManager = useConversationManager({
-    initialMessages: messages,
-    initialConversationId: conversationId,
-    onMessagesUpdate: setMessages,
-    onConversationIdUpdate: setConversationId,
-    onIsLoadingConversationUpdate: setIsLoadingConversation,
-    onShowWelcomeMessageUpdate: setShowWelcomeMessage,
-    onIsNavigatingToChatUpdate: (navigating: boolean) => {
-      // Using setIsNavigatingToChatHook as callback after defining it
-      setIsNavigatingToChatHook && setIsNavigatingToChatHook(navigating);
-    },
-  });
-
-  const {
-    messages: conversationMessages,
-    setMessages: setConversationMessages,
-    conversationId: conversationHookId,
-    setConversationId: setConversationHookId,
-    isLoadingConversation: isLoadingConversationHook,
-    setIsLoadingConversation: setIsLoadingConversationHook,
-    showWelcomeMessage: showWelcomeMessageHook,
-    setShowWelcomeMessage: setShowWelcomeMessageHook,
-    isNavigatingToChat: isNavigatingToChatHook,
-    setIsNavigatingToChat: setIsNavigatingToChatHook,
-    loadOrCreateConversation,
-    createConversation,
-    handleNewConversation,
-    clearCurrentConversation,
-    loadConversation
-  } = conversationManager;
+  } = useScrollBehavior({ messages: conversationMessages });
 
   // Use the message handler hook
   const {
@@ -125,8 +79,8 @@ const Chat = () => {
     showUpgradeModal: hookShowUpgradeModal,
     setShowUpgradeModal: setHookShowUpgradeModal
   } = useMessageHandler({
-    conversationId,
-    messages,
+    conversationId: conversationHookId,
+    messages: conversationMessages,
     setMessages,
     setIsLoading,
     refreshSubscription
@@ -138,7 +92,7 @@ const Chat = () => {
 
 
   // Create local version of handleSendMessage to maintain the original signature
-  const handleSendMessage = async (content: string, mode: "auto" | "document" | "general") => {
+  const handleSendMessage = async (content: string, mode: "auto" | "document" | "general" = "auto") => {
     // Enable smooth scrolling for new messages being added and reset user scroll state
     setShouldAutoScroll(true);
     setIsUserScrolling(false);
@@ -147,8 +101,8 @@ const Chat = () => {
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    // Auto-fill the input with the suggestion and use the current mode
-    handleSuggestionClickFromHook(suggestion, chatMode);
+    // Auto-fill the input with the suggestion and use auto mode
+    handleSuggestionClickFromHook(suggestion, "auto");
   };
 
   // Keyboard shortcut for toggling sidebar - keeping this here instead of hook
@@ -167,48 +121,10 @@ const Chat = () => {
 
 
   useEffect(() => {
-    console.log("Messages updated:", messages.length);
-  }, [messages]);
+    console.log("Messages updated:", conversationMessages.length);
+  }, [conversationMessages]);
 
-  useEffect(() => {
-    if (conversationId) {
-      try {
-        localStorage.setItem("lastConversationId", conversationId);
-      } catch {
-        // Ignore localStorage errors
-      }
-    }
-  }, [conversationId]);
 
-  // Load cached messages when user is available
-  useEffect(() => {
-    if (user) {
-      // On mount, immediately check if we have a cached conversation
-      try {
-        const lastId = localStorage.getItem("lastConversationId");
-        if (lastId) {
-          // Try user-specific cache first
-          let cached = localStorage.getItem(`chat:${user.id}:${lastId}`);
-          if (!cached) {
-            // Fallback to old format for compatibility
-            cached = localStorage.getItem(`chat:${lastId}`);
-          }
-          if (cached) {
-            const cachedMessages: Message[] = JSON.parse(cached);
-            if (Array.isArray(cachedMessages) && cachedMessages.length > 0) {
-              console.log("⚡ Initial state: Using cached messages");
-              setMessages(cachedMessages);
-            }
-          }
-        }
-      } catch (e) {
-        console.error("Initial cache check error:", e);
-      }
-    }
-  }, [user]);
-
-  // For now, keep the conversation management functions in the main component
-  // for backward compatibility with existing code
 
 
 
@@ -228,7 +144,7 @@ const Chat = () => {
         currentConversationId={conversationHookId}
         onConversationSelect={loadConversation}
         onNewConversation={handleNewConversation}
-        onClearCurrentConversation={clearCurrentConversation}
+        onClearCurrentConversation={handleNewConversation}
        collapsed={sidebarCollapsed}
         className="flex-1 min-h-0"
         refreshTrigger={sidebarRefreshTrigger}
@@ -361,22 +277,33 @@ const Chat = () => {
             {/* Conversation manager handles welcome messages and new conversation options,
                  or returns null when regular messages should be displayed */}
             <ConversationManager
-              initialMessages={messages}
+              initialMessages={conversationMessages}
               initialConversationId={conversationHookId}
               onMessagesUpdate={setMessages}
               onConversationIdUpdate={setConversationId}
-              onIsLoadingConversationUpdate={setIsLoadingConversation}
+              onIsLoadingConversationUpdate={() => {}} // ConversationManager still expects this prop
               onShowWelcomeMessageUpdate={setShowWelcomeMessage}
-              onIsNavigatingToChatUpdate={setIsNavigatingToChatHook}
-              isLoading={isLoading}
+              onIsNavigatingToChatUpdate={() => {}} // ConversationManager still expects this prop
+              isLoading={isLoading || isLoadingConversationHook}
               onNewConversation={handleNewConversation}
+              // Pass the values from the conversation manager hook
+              conversationId={conversationHookId}
+              isLoadingConversation={isLoadingConversationHook}
+              showWelcomeMessage={showWelcomeMessageHook}
+              isCreatingNew={isCreatingNewHook}
+              loadConversation={loadConversation}
+              handleNewConversation={handleNewConversation}
             />
-            {/* Show messages when ConversationManager returns null (has no special UI to render) */}
-            {messages.length > 0 && !isNavigatingToChatHook && (
+            {/* Show messages when ConversationManager returns null (has no special UI to render)
+                 and ensure that only one loading indicator appears at a time */}
+            { 
+             !isLoadingConversationHook && 
+             (conversationMessages.length > 0) && (
               <MessageList
-                messages={messages}
+                messages={conversationMessages}
                 isLoading={isLoading}
-                isNavigatingToChat={isNavigatingToChatHook}
+                isNavigatingToChat={false} // Simplified hook doesn't track this
+                isLoadingConversation={isLoadingConversationHook}
                 messagesEndRef={messagesEndRef}
                 onSuggestionClick={handleSuggestionClick}
               />
@@ -388,15 +315,11 @@ const Chat = () => {
         <div className={`fixed bottom-0 left-0 right-0 border-t border-border/50 backdrop-blur-sm bg-card/95 shadow-lg z-30 transition-all duration-300 pb-safe ${sidebarCollapsed ? 'lg:left-20' : 'lg:left-80'}`}>
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-4">
             <ChatInput
-              onSend={handleSendMessage}
-              disabled={isLoading || isNavigatingToChatHook}
-              mode={chatMode}
-              onModeChange={setChatMode}
+              onSend={(message, mode = "auto") => handleSendMessage(message, mode)}
+              disabled={isLoading}
             />
             <p className="text-xs text-muted-foreground text-center mt-2">
-              {isNavigatingToChatHook && conversationHookId && messages.length === 0
-                ? "Select an option above to continue"
-                : "Press Enter to send, Shift+Enter for new line"}
+              {"Press Enter to send, Shift+Enter for new line"}
             </p>
           </div>
         </div>

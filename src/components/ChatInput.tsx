@@ -1,22 +1,19 @@
 import { useState } from "react";
-import { ModeSelector } from "@/components/ModeSelector";
-import { Button } from "@/components/ui/button";
+import { /*ModeSelector*/ } from "@/components/ModeSelector";
 import { Textarea } from "@/components/ui/textarea";
-import { Send } from "lucide-react";
 
 interface ChatInputProps {
   onSend: (message: string, mode: "auto" | "document" | "general") => void;
   disabled?: boolean;
-  mode: "auto" | "document" | "general";
-  onModeChange: (mode: "auto" | "document" | "general") => void;
 }
 
-export const ChatInput = ({ onSend, disabled, mode, onModeChange }: ChatInputProps) => {
+export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
+  const defaultMode: "auto" | "document" | "general" = "auto"; // Default to auto mode
   const [input, setInput] = useState("");
 
   const handleSubmit = () => {
     if (input.trim() && !disabled) {
-      onSend(input.trim(), mode);
+      onSend(input.trim(), "auto"); // Pass default mode
       setInput("");
     }
   };
@@ -37,9 +34,6 @@ export const ChatInput = ({ onSend, disabled, mode, onModeChange }: ChatInputPro
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
-        <ModeSelector mode={mode} onModeChange={onModeChange} />
-      </div>
       <div className="relative">
         <textarea
           value={input}

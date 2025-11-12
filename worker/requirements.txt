@@ -1,0 +1,37 @@
+# ============================================================================
+# PYTHON DEPENDENCIES: PDF Processing Worker (Optimized for Railway)
+# OPTIMIZED for free tier deployments (4GB image limit)
+# VERSION COMPATIBILITY: All HuggingFace packages updated to work together
+# ============================================================================
+
+# Core dependencies
+redis==5.0.1
+supabase==2.7.4
+python-dotenv==1.0.0
+
+# PDF processing - LIGHTWEIGHT ALTERNATIVES
+pymupdf==1.23.13
+PyPDF2==3.0.1  # ✨ ADDED: This was missing!
+ocrmypdf==16.11.1
+pillow-jpls==1.3.2
+
+# Text processing
+tiktoken==0.5.2
+
+# Embeddings - COMPATIBLE VERSIONS (Updated to work together)
+sentence-transformers==2.7.0
+transformers==4.40.0
+huggingface-hub==0.23.0
+# NOTE: PyTorch CPU version installed separately in Dockerfile
+
+# Image processing for screenshot support - MINIMAL VERSIONS
+Pillow>=10.0.1
+pytesseract==0.3.10
+opencv-python-headless==4.8.1.78
+
+# Utilities
+numpy==1.26.3
+requests==2.31.0
+
+# Memory monitoring (helps debug OOM issues)
+psutil==5.9.6

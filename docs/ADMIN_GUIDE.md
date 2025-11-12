@@ -51,7 +51,7 @@ Complete system configuration interface.
 - **System Information**:
   - Database: PostgreSQL 15
   - Vector Extension: pgvector 0.5.0
-  - Embedding Model: all-MiniLM-L6-v2
+  - Embedding Model: bge-small-en-v1.5
   - Vector Dimensions: 384
 
 - **Security Notice**:

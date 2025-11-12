@@ -14,6 +14,7 @@ interface MessageListProps {
   messages: Message[];
   isLoading: boolean;
   isNavigatingToChat: boolean;
+  isLoadingConversation: boolean;
   messagesEndRef: React.RefObject<HTMLDivElement>;
   onSuggestionClick: (suggestion: string) => void;
 }
@@ -22,6 +23,7 @@ export const MessageList = ({
   messages,
   isLoading,
   isNavigatingToChat,
+  isLoadingConversation,
   messagesEndRef,
   onSuggestionClick
 }: MessageListProps) => {
@@ -33,12 +35,12 @@ export const MessageList = ({
         <ChatMessage
           key={message.messageId || `msg-${index}-${message.role}`}
           {...message}
-          isStreaming={isLoading && index === arr.length - 1 && message.role === 'assistant'}
+          isStreaming={isLoading && !isLoadingConversation && index === arr.length - 1 && message.role === 'assistant'}
           onSuggestionClick={onSuggestionClick}
         />
       ))}
 
-      {isLoading && !isNavigatingToChat && (
+      {isLoading && !isNavigatingToChat && !isLoadingConversation && (
         <div className="flex gap-4 mb-4">
           <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center shrink-0 shadow-sm shadow-primary/20">
             <Bot className="w-5 h-5 text-primary-foreground animate-pulse" />

@@ -163,7 +163,7 @@ Configuration management with:
 - **Status**: ✅ COMPLETED - Priority-based queue system implemented with multi-queue support
 
 ### 7. Model Upgrade (Embeddings) - ✅ IMPLEMENTED
-- **Current**: `all-MiniLM-L6-v2` (23MB, 384 dims) - Better quality than L3-v2, same dimensions
+- **Current**: `bge-small-en-v1.5` (23MB, 384 dims) - Better quality than L3-v2, same dimensions
 - **Previously**: `paraphrase-MiniLM-L3-v2` (61M params, 384 dims)
 - **Status**: ✅ COMPLETED - Model upgraded for better quality while maintaining efficiency
 
@@ -360,7 +360,7 @@ def run(self):
 # Changed default to better model - already implemented
 EMBEDDING_MODEL = os.getenv(
     'EMBEDDING_MODEL', 
-    'all-MiniLM-L6-v2'  # Better quality, still efficient
+    'bge-small-en-v1.5'  # Better quality, still efficient
 )
 ```
 
@@ -460,7 +460,7 @@ Backend: Worker service (Python 3.11)
 Database: Supabase (PostgreSQL)
 Queue: Redis (Multi-queue: high/normal/low priority)
 File Processing: PDF (PyPDF2, ocrmypdf) + Images (PIL, OpenCV, pytesseract)
-Embeddings: Sentence Transformers (all-MiniLM-L6-v2)
+Embeddings: Sentence Transformers (bge-small-en-v1.5)
 Deployment: Railway (512MB RAM free tier)
 ```
 

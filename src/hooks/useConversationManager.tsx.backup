@@ -132,7 +132,6 @@ export const useConversationManager = ({
       setConversationId(convId);
       setMessages(loadedMessages);
       setShowWelcomeMessage(false);
-      setIsCreatingNew(false); // Reset the creating new state when loading existing conversation
       saveToCache(convId, loadedMessages);
 
       console.log("✅ Loaded from DB:", loadedMessages.length, "messages");
@@ -159,7 +158,6 @@ export const useConversationManager = ({
       setConversationId(data.id);
       setMessages([]);
       setShowWelcomeMessage(false);
-      setIsCreatingNew(false); // Reset the creating new state when a conversation is created in DB
       localStorage.setItem("lastConversationId", data.id);
 
       console.log("✅ Created new conversation:", data.id);
@@ -176,7 +174,7 @@ export const useConversationManager = ({
   };
 
   const handleNewConversation = async () => {
-    // Reset to initial state without creating a DB entry initially
+    // Reset to initial state without creating a DB entry
     setConversationId(null);
     setMessages([]);
     setShowWelcomeMessage(true);

@@ -76,11 +76,12 @@ export const ModeSelector = ({ mode, onModeChange }: ModeSelectorProps) => {
                 AI intelligently decides when to search documents or use general knowledge
               </div>
             </div>
-            {mode === "auto" && (
+            
+          {mode === "auto" && (
               <div className="flex-shrink-0">
                 <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
               </div>
-            )}
+            )} 
           </div>
         </DropdownMenuItem>
         <DropdownMenuItem 
@@ -101,7 +102,7 @@ export const ModeSelector = ({ mode, onModeChange }: ModeSelectorProps) => {
               <div className="flex-shrink-0">
                 <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
               </div>
-            )}
+            )} 
           </div>
         </DropdownMenuItem>
         <DropdownMenuItem 
@@ -122,7 +123,7 @@ export const ModeSelector = ({ mode, onModeChange }: ModeSelectorProps) => {
               <div className="flex-shrink-0">
                 <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse" />
               </div>
-            )}
+            )} 
           </div>
         </DropdownMenuItem>
       </DropdownMenuContent>

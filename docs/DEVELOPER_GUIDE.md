@@ -120,7 +120,7 @@ Decrement credits (if free user)
 - **Redis** - Job queue
 
 ### AI
-- **HuggingFace** - `all-MiniLM-L6-v2` (384-dim embeddings)
+- **HuggingFace** - `bge-small-en-v1.5` (384-dim embeddings)
 - **Google Gemini** - Chat responses
 
 ---

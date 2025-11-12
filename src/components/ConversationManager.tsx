@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAuthContext } from "@/contexts/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { Bot, Plus } from "lucide-react";
-import { useConversationManager } from "@/hooks/useConversationManager";
 
 interface Message {
   role: "user" | "assistant";
@@ -23,6 +22,15 @@ interface ConversationManagerProps {
   onIsNavigatingToChatUpdate: (navigating: boolean) => void;
   isLoading: boolean;
   onNewConversation: () => void;
+  // Additional props from parent component (not from useConversationManager hook)
+  conversationId: string | null;
+  isLoadingConversation: boolean;
+  showWelcomeMessage: boolean;
+  isCreatingNew?: boolean; // Added prop to track if creating a new conversation
+  loadConversation: (id: string) => void;
+  handleNewConversation: () => void;
+  isNavigatingToChat?: boolean; // Optional prop for backward compatibility
+  clearCurrentConversation?: () => void; // Optional prop for backward compatibility
 }
 
 export const ConversationManager = ({
@@ -34,29 +42,19 @@ export const ConversationManager = ({
   onShowWelcomeMessageUpdate,
   onIsNavigatingToChatUpdate,
   isLoading,
-  onNewConversation
+  onNewConversation,
+  conversationId,
+  isLoadingConversation,
+  showWelcomeMessage,
+  isCreatingNew = false, // Default to false if not provided
+  loadConversation,
+  handleNewConversation,
+  isNavigatingToChat = false,
+  clearCurrentConversation
 }: ConversationManagerProps) => {
   const navigate = useNavigate();
   const { user, signOut } = useAuthContext();
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
-  
-  const {
-    conversationId,
-    isLoadingConversation,
-    showWelcomeMessage,
-    isNavigatingToChat,
-    handleNewConversation,
-    clearCurrentConversation,
-    loadConversation
-  } = useConversationManager({
-    initialMessages,
-    initialConversationId,
-    onMessagesUpdate,
-    onConversationIdUpdate,
-    onIsLoadingConversationUpdate,
-    onShowWelcomeMessageUpdate,
-    onIsNavigatingToChatUpdate
-  });
 
   const handleSignOut = async () => {
     await signOut();
@@ -69,9 +67,16 @@ export const ConversationManager = ({
   };
 
   // Determine if we're waiting for initial data
-  const shouldShowWelcomeOptions = (isNavigatingToChat && conversationId && initialMessages.length === 0);
-  const shouldShowInitialMessage = (initialMessages.length === 0 && !isNavigatingToChat);
+  // Determine if we're showing the welcome options (when there's a conversation ID but no messages)
+  const shouldShowWelcomeOptions = (conversationId && initialMessages.length === 0 && showWelcomeMessage);
   
+  // Determine if we're waiting for initial data, but only show "Conversation Deleted" when we expect to have data but don't
+  // Only show "Conversation Deleted" if we're not in a newly created conversation state
+  const shouldShowDeletedMessage = (initialMessages.length === 0 && !showWelcomeMessage && !conversationId && !isCreatingNew);
+  
+  // Show initial welcome message if no messages and showing welcome, or if we're in a new conversation state
+  const shouldShowInitialMessage = (initialMessages.length === 0 && (showWelcomeMessage || isCreatingNew) && !conversationId);
+
   if (shouldShowWelcomeOptions) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -84,14 +89,14 @@ export const ConversationManager = ({
             We found your previous conversation. What would you like to do?
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button 
+            <Button
               onClick={() => loadConversation(conversationId)}
               className="transition-smooth hover:scale-102 active:scale-98 min-w-[200px] bg-primary hover:bg-primary/90"
               disabled={isLoading || isLoadingConversation}
             >
               <span>Continue Previous Conversation</span>
             </Button>
-            <Button 
+            <Button
               onClick={handleNewConversationClick}
               variant="outline"
               className="transition-smooth hover:scale-102 active:scale-98 min-w-[200px]"
@@ -106,6 +111,30 @@ export const ConversationManager = ({
     );
   }
 
+  if (shouldShowDeletedMessage) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center shadow-glow">
+            <Bot className="w-10 h-10 text-primary" />
+          </div>
+          <h2 className="text-3xl font-bold mb-3 text-foreground">Conversation Deleted</h2>
+          <p className="text-muted-foreground text-lg max-w-md mx-auto mb-6">
+            The conversation has been deleted. Start a new conversation by clicking the "New Conversation" button or typing a message below.
+          </p>
+          <Button
+            onClick={handleNewConversationClick}
+            className="mb-4 transition-smooth hover:scale-102 active:scale-98"
+            disabled={isLoading || isLoadingConversation}
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Start New Conversation
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (shouldShowInitialMessage) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -113,29 +142,10 @@ export const ConversationManager = ({
           <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary/10 flex items-center justify-center shadow-glow">
             <Bot className="w-10 h-10 text-primary" />
           </div>
-          {showWelcomeMessage ? (
-            <>
-              <h2 className="text-3xl font-bold mb-3 text-foreground">Conversation Deleted</h2>
-              <p className="text-muted-foreground text-lg max-w-md mx-auto mb-6">
-                The conversation has been deleted. Start a new conversation by clicking the "New Conversation" button or typing a message below.
-              </p>
-              <Button 
-                onClick={handleNewConversationClick}
-                className="mb-4 transition-smooth hover:scale-102 active:scale-98"
-                disabled={isLoading || isLoadingConversation}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Start New Conversation
-              </Button>
-            </>
-          ) : (
-            <>
-              <h2 className="text-3xl font-bold mb-3 text-foreground">Ready to study?</h2>
-              <p className="text-muted-foreground text-lg max-w-md mx-auto">
-                Ask me anything about your course materials! I can explain concepts, help with homework, or search through your uploaded textbooks and notes.
-              </p>
-            </>
-          )}
+          <h2 className="text-3xl font-bold mb-3 text-foreground">Ready to study?</h2>
+          <p className="text-muted-foreground text-lg max-w-md mx-auto">
+            Ask me anything about your course materials! I can explain concepts, help with homework, or search through your uploaded textbooks and notes.
+          </p>
         </div>
       </div>
     );

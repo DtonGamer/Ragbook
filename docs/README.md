@@ -6,7 +6,7 @@ This project is a production-grade, scalable Retrieval-Augmented Generation (RAG
 
 - **Asynchronous Document Processing**: A Python worker handles heavy tasks like OCR and embedding generation in the background, preventing frontend timeouts.
 - **OCR for Scanned PDFs**: Uses `OCRmyPDF` to extract text from scanned documents, making them searchable.
-- **High-Quality Embeddings**: Leverages HuggingFace's `all-MiniLM-L6-v2` model for efficient and high-quality 384-dimensional embeddings with no rate limits.
+- **High-Quality Embeddings**: Leverages HuggingFace's `bge-small-en-v1.5` model for efficient and high-quality 384-dimensional embeddings with no rate limits.
 - **Real-Time Status Updates**: Users can track their document's progress from `queued` to `completed` via Supabase Realtime.
 - **Credit-Based Monetization**: Integrates with Paystack for a freemium model, giving users a starting credit balance and the option to upgrade for more.
 - **Storage & Performance Optimized**: 384-dimensional vectors cut storage costs by 50% compared to 768-dim models, with optimized vector search.
@@ -17,7 +17,7 @@ This project is a production-grade, scalable Retrieval-Augmented Generation (RAG
 - **Backend**: Supabase (PostgreSQL, pgvector, Storage, Auth, Realtime)
 - **Worker**: Python, Docker, `sentence-transformers`, `OCRmyPDF`
 - **Queue**: Upstash Redis
-- **AI Models**: HuggingFace `all-MiniLM-L6-v2` (Embeddings), Google Gemini (Chat)
+- **AI Models**: HuggingFace (Embeddings), Google Gemini (Chat)
 - **Payments**: Paystack
 
 ## 🏗️ System Architecture
