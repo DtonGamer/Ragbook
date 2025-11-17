@@ -22,7 +22,7 @@ export const useConversationManager = ({
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [isLoadingConversation, setIsLoadingConversation] = useState(false);
-  const [showWelcomeMessage, setShowWelcomeMessage] = useState(true);
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(false); // Changed to false by default
   const [isCreatingNew, setIsCreatingNew] = useState(false); // Track if we're creating a new conversation
 
   const isInitializing = useRef(false);
@@ -75,16 +75,29 @@ export const useConversationManager = ({
             setShowWelcomeMessage(false);
             console.log("✅ Loaded from cache:", cached.length, "messages");
           } else {
-            // Load from database
-            await loadConversation(lastConvId);
+            // Check if the conversation exists in the database
+            const { data: convExists, error: convError } = await supabase
+              .from("conversations")
+              .select("id")
+              .eq("id", lastConvId)
+              .single();
+
+            if (convExists && !convError) {
+              // Load from database
+              await loadConversation(lastConvId);
+            } else {
+              // Conversation doesn't exist in DB - show welcome message
+              resetToWelcomeState();
+            }
           }
         } else {
           // No previous conversation - show welcome
-          setShowWelcomeMessage(true);
+          resetToWelcomeState();
         }
       } catch (error) {
         console.error("Initialization error:", error);
-        setShowWelcomeMessage(true);
+        // On error, reset to welcome state
+        resetToWelcomeState();
       } finally {
         isInitializing.current = false;
       }
@@ -92,6 +105,14 @@ export const useConversationManager = ({
 
     initialize();
   }, [user]);
+
+  // Helper function to reset to welcome state
+  const resetToWelcomeState = () => {
+    setConversationId(null);
+    setMessages([]);
+    setShowWelcomeMessage(true);
+    setIsCreatingNew(true);
+  };
 
   // Save to cache whenever messages change
   useEffect(() => {
@@ -103,12 +124,6 @@ export const useConversationManager = ({
 
   const loadConversation = async (convId: string) => {
     if (isLoadingConversation) return;
-
-    // Don't reload if already viewing with messages
-    if (conversationId === convId && messages.length > 0) {
-      console.log("✓ Already viewing this conversation");
-      return;
-    }
 
     setIsLoadingConversation(true);
 
@@ -139,6 +154,8 @@ export const useConversationManager = ({
     } catch (error) {
       console.error("Error loading conversation:", error);
       toast.error("Failed to load conversation");
+      // If conversation doesn't exist, show welcome message
+      resetToWelcomeState();
     } finally {
       setIsLoadingConversation(false);
     }

@@ -66,14 +66,12 @@ export const ConversationManager = ({
     setSidebarRefreshTrigger(prev => prev + 1);
   };
 
-  // Determine if we're waiting for initial data
   // Determine if we're showing the welcome options (when there's a conversation ID but no messages)
-  const shouldShowWelcomeOptions = (conversationId && initialMessages.length === 0 && showWelcomeMessage);
-  
-  // Determine if we're waiting for initial data, but only show "Conversation Deleted" when we expect to have data but don't
-  // Only show "Conversation Deleted" if we're not in a newly created conversation state
-  const shouldShowDeletedMessage = (initialMessages.length === 0 && !showWelcomeMessage && !conversationId && !isCreatingNew);
-  
+  const shouldShowWelcomeOptions = (conversationId && initialMessages.length === 0 && !isCreatingNew);
+
+  // Show "Conversation Deleted" only when we had a conversation ID but it no longer exists
+  const shouldShowDeletedMessage = (initialConversationId && initialMessages.length === 0 && !showWelcomeMessage && !conversationId && !isCreatingNew);
+
   // Show initial welcome message if no messages and showing welcome, or if we're in a new conversation state
   const shouldShowInitialMessage = (initialMessages.length === 0 && (showWelcomeMessage || isCreatingNew) && !conversationId);
 
