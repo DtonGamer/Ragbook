@@ -80,17 +80,37 @@ export default function Pricing() {
     }
 
     try {
-      // Initialize Monnify payment
+      // Check if Monnify SDK is available
+      if (!window.MonnifySDK) {
+        console.error('Monnify SDK not loaded');
+        toast.error("Payment system is not ready. Please try again later.");
+        setIsProcessing(false);
+        return;
+      }
+
+      // Initialize Monnify payment with correct parameters for Monnify SDK
       const monnifyConfig = {
-        amount: proPlan.price / 100, // Monnify uses actual amount (not in kobo like Paystack)
-        currency: proPlan.currency, // Use the currency from the configuration
-        reference: `${Date.now()}-${user.id}`,
-        customerName: user.user_metadata?.full_name || user.email.split('@')[0],
+        amount: proPlan.price / 100, // Convert from kobo to naira
+        currency: "NGN", // Monnify typically uses NGN
+        reference: String(new Date().getTime()),
+        customerFullName: user.user_metadata?.full_name || user.email.split('@')[0],
         customerEmail: user.email,
         customerPhoneNumber: user.phone || "", // Optional
+        apiKey: import.meta.env.VITE_MONNIFY_PUBLIC_KEY, // Use the public key
         contractCode: import.meta.env.VITE_MONNIFY_CONTRACT_CODE,
-        onSuccess: (response: any) => {
-          console.log('Payment successful:', response);
+        paymentDescription: "Pro Plan Subscription",
+        metadata: {
+          userId: user.id,
+          plan: "pro"
+        },
+        onLoadStart: () => {
+          console.log("Monnify SDK loading...");
+        },
+        onLoadComplete: () => {
+          console.log("Monnify SDK loaded successfully");
+        },
+        onComplete: (response: any) => {
+          console.log("Payment completed:", response);
           setIsProcessing(false);
           setShowSuccessModal(true);
 
@@ -100,21 +120,15 @@ export default function Pricing() {
             refreshSubscription();
           }, 2000);
         },
-        onCancel: (response: any) => {
-          console.log('Payment cancelled:', response);
+        onClose: (data: any) => {
+          console.log("Payment modal closed:", data);
           setIsProcessing(false);
           toast.info("Payment cancelled");
-        },
-        onError: (response: any) => {
-          console.log('Payment error:', response);
-          setIsProcessing(false);
-          toast.error("Payment failed. Please try again.");
         }
       };
 
-      // @ts-ignore - MonnifySDK should be available after script loads in index.html
-      const monnify = new window.MonnifySDK(monnifyConfig);
-      monnify.initialize();
+      // Call the initialize method (not a constructor!)
+      window.MonnifySDK.initialize(monnifyConfig);
     } catch (error) {
       console.error('Payment initialization error:', error);
       toast.error("Failed to initialize payment");
