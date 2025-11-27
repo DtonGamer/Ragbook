@@ -8,7 +8,7 @@ This project is a production-grade, scalable Retrieval-Augmented Generation (RAG
 - **OCR for Scanned PDFs**: Uses `OCRmyPDF` to extract text from scanned documents, making them searchable.
 - **High-Quality Embeddings**: Leverages HuggingFace's `bge-small-en-v1.5` model for efficient and high-quality 384-dimensional embeddings with no rate limits.
 - **Real-Time Status Updates**: Users can track their document's progress from `queued` to `completed` via Supabase Realtime.
-- **Credit-Based Monetization**: Integrates with Paystack for a freemium model, giving users a starting credit balance and the option to upgrade for more.
+- **Credit-Based Monetization**: Integrates with Monnify for a freemium model, giving users a starting credit balance and the option to upgrade for more.
 - **Storage & Performance Optimized**: 384-dimensional vectors cut storage costs by 50% compared to 768-dim models, with optimized vector search.
 
 ## 📚 Tech Stack
@@ -18,7 +18,7 @@ This project is a production-grade, scalable Retrieval-Augmented Generation (RAG
 - **Worker**: Python, Docker, `sentence-transformers`, `OCRmyPDF`
 - **Queue**: Upstash Redis
 - **AI Models**: HuggingFace (Embeddings), Google Gemini (Chat)
-- **Payments**: Paystack
+- **Payments**: Monnify
 
 ## 🏗️ System Architecture
 
@@ -203,8 +203,10 @@ CREATE TABLE user_subscriptions (
   credits_max INTEGER DEFAULT 50,
   last_refresh_date TIMESTAMPTZ,
   subscription_end_date TIMESTAMPTZ,
-  paystack_subscription_id TEXT,
-  paystack_customer_code TEXT,
+  monnify_contract_code TEXT,
+  monnify_customer_email TEXT,
+  monnify_customer_name TEXT,
+  monnify_transaction_reference TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -285,7 +287,7 @@ LOG_LEVEL=INFO
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_PAYSTACK_PUBLIC_KEY=pk_test_...
+VITE_MONNIFY_PUBLIC_KEY=your_monnify_public_key
 ```
 
 ### Edge Function Secrets (Supabase)
@@ -294,7 +296,7 @@ VITE_PAYSTACK_PUBLIC_KEY=pk_test_...
 REDIS_URL=redis://...
 HUGGINGFACE_API_KEY=hf_...  # Optional, for API-based embeddings
 GEMINI_API_KEY=your-key
-PAYSTACK_SECRET_KEY=sk_test_...
+MONNIFY_SECRET_KEY=your_monnify_secret_key
 ```
 
 ## 🔌 API Reference
@@ -348,16 +350,15 @@ data: {"type":"sources","sources":[{"content":"...","similarity":0.85}]}
 data: [DONE]
 ```
 
-#### 3. `paystack-webhook`
+#### 3. `monnify-webhook`
 
-Handles payment webhooks from Paystack.
+Handles payment webhooks from Monnify.
 
-**Endpoint**: `POST /functions/v1/paystack-webhook`
+**Endpoint**: `POST /functions/v1/monnify-webhook`
 
 **Events Handled**:
-- `charge.success` - Payment successful
-- `subscription.create` - New subscription
-- `subscription.disable` - Subscription cancelled
+- `SUCCESSFUL_TRANSACTION` - Payment successful
+- `MANDATE_UPDATE` - Handle mandate status changes (subscription activation/cancellation)
 
 ## 💰 Pricing Model
 

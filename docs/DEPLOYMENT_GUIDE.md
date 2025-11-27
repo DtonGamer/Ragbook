@@ -238,11 +238,11 @@ curl -X POST \
 
 ---
 
-## 💳 Phase 5: Paystack Setup (15 minutes)
+## 💳 Phase 5: Monnify Setup (15 minutes)
 
-### Step 1: Create Paystack Account
+### Step 1: Create Monnify Account
 
-1. Go to [paystack.com](https://paystack.com)
+1. Go to [monnify.com](https://monnify.com)
 2. Sign up (requires Nigerian phone number)
 3. Complete email verification
 4. Complete KYC verification (for live mode)
@@ -251,28 +251,27 @@ curl -X POST \
 
 1. Navigate to **Settings → API Keys & Webhooks**
 2. For testing, use **Test Keys**:
-   - **Public Key**: `pk_test_...` (for frontend)
-   - **Secret Key**: `sk_test_...` (already set in Edge Functions)
+   - **Public Key**: `pub_...` (for frontend)
+   - **Secret Key**: `secret_...` (already set in Edge Functions)
 3. For production, switch to **Live Keys** after testing
+4. Also copy your **Contract Code** from the dashboard
 
 ### Step 3: Configure Webhook
 
-1. In Paystack dashboard, go to **Settings → Webhooks**
+1. In Monnify dashboard, go to **Settings → Webhooks**
 2. Click **Add Endpoint**
 3. Enter webhook URL:
    ```
-   https://YOUR_PROJECT_REF.supabase.co/functions/v1/paystack-webhook
+   https://YOUR_PROJECT_REF.supabase.co/functions/v1/monnify-webhook
    ```
 4. Select events to listen for:
-   - ✅ `charge.success`
-   - ✅ `subscription.create`
-   - ✅ `subscription.disable`
+   - ✅ `SUCCESSFUL_TRANSACTION`
+   - ✅ `MANDATE_UPDATE`
 5. Click **Add Endpoint**
-6. Copy the **Webhook Secret** (not needed for Paystack, but good to save)
 
 ### Step 4: Test Payment Flow
 
-Use Paystack test cards:
+Use Monnify test cards:
 
 | Card Number | CVV | PIN | Expiry | Result |
 |-------------|-----|-----|--------|--------|
@@ -518,10 +517,10 @@ Before switching to production:
 - [ ] All migrations applied successfully
 - [ ] Worker deployed and running (24+ hours uptime)
 - [ ] All Edge Functions deployed and tested
-- [ ] Paystack webhook configured and tested
+- [ ] Monnify webhook configured and tested
 - [ ] Test payment successful with test card
-- [ ] **Switch to Paystack live keys**
-- [ ] **Update frontend with live Paystack key**
+- [ ] **Switch to Monnify live keys**
+- [ ] **Update frontend with live Monnify keys**
 - [ ] Test complete user journey end-to-end
 - [ ] Set up monitoring alerts (Render, Upstash, Supabase)
 - [ ] Enable Supabase daily backups

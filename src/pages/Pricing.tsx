@@ -18,7 +18,7 @@ import { getPricingConfig, PricingConfig } from "@/config/pricingConfig";
 
 declare global {
   interface Window {
-    PaystackPop: any;
+    MonnifySDK: any;
   }
 }
 
@@ -69,7 +69,7 @@ export default function Pricing() {
     }
 
     setIsProcessing(true);
-    
+
     // Get the Pro plan from the configuration
     const proPlan = pricingConfig.plans.find(plan => plan.id === 'pro');
     if (!proPlan) {
@@ -80,40 +80,43 @@ export default function Pricing() {
     }
 
     try {
-      const callback = (response: any) => {
-        console.log('Payment successful:', response);
-        setIsProcessing(false);
-        setShowSuccessModal(true);
-        
-        // Wait a moment for webhook to process
-        setTimeout(() => {
-          // Call refreshSubscription without await since callback can't be async
-          refreshSubscription();
-        }, 2000);
-      };
-
-      const onClose = () => {
-        setIsProcessing(false);
-        toast.info("Payment cancelled");
-      };
-
-      const handler = window.PaystackPop.setup({
-        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
-        email: user.email,
-        amount: proPlan.price, // Use the price from the configuration
+      // Initialize Monnify payment
+      const monnifyConfig = {
+        amount: proPlan.price / 100, // Monnify uses actual amount (not in kobo like Paystack)
         currency: proPlan.currency, // Use the currency from the configuration
-        ref: `${Date.now()}-${user.id}`,
-        metadata: {
-          user_id: user.id,
-          plan: proPlan.id,
-        },
-        callback: callback,
-        onClose: onClose,
-      });
+        reference: `${Date.now()}-${user.id}`,
+        customerName: user.user_metadata?.full_name || user.email.split('@')[0],
+        customerEmail: user.email,
+        customerPhoneNumber: user.phone || "", // Optional
+        contractCode: import.meta.env.VITE_MONNIFY_CONTRACT_CODE,
+        onSuccess: (response: any) => {
+          console.log('Payment successful:', response);
+          setIsProcessing(false);
+          setShowSuccessModal(true);
 
-      handler.openIframe();
+          // Wait a moment for webhook to process
+          setTimeout(() => {
+            // Call refreshSubscription without await since callback can't be async
+            refreshSubscription();
+          }, 2000);
+        },
+        onCancel: (response: any) => {
+          console.log('Payment cancelled:', response);
+          setIsProcessing(false);
+          toast.info("Payment cancelled");
+        },
+        onError: (response: any) => {
+          console.log('Payment error:', response);
+          setIsProcessing(false);
+          toast.error("Payment failed. Please try again.");
+        }
+      };
+
+      // @ts-ignore - MonnifySDK should be available after script loads in index.html
+      const monnify = new window.MonnifySDK(monnifyConfig);
+      monnify.initialize();
     } catch (error) {
-      console.error('Payment error:', error);
+      console.error('Payment initialization error:', error);
       toast.error("Failed to initialize payment");
       setIsProcessing(false);
     }

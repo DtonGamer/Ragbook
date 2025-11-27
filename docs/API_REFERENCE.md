@@ -10,7 +10,7 @@ Complete API documentation for RAG Book Edge Functions and database operations.
 - [Edge Functions](#edge-functions)
   - [submit-document](#submit-document)
   - [rag-chat-credits](#rag-chat-credits)
-  - [paystack-webhook](#paystack-webhook)
+  - [monnify-webhook](#monnify-webhook)
 - [Database Functions](#database-functions)
 - [Error Codes](#error-codes)
 
@@ -269,59 +269,52 @@ while (true) {
 
 ---
 
-### paystack-webhook
+### monnify-webhook
 
-Handles payment webhooks from Paystack. This endpoint is called by Paystack, not by the frontend.
+Handles payment webhooks from Monnify. This endpoint is called by Monnify, not by the frontend.
 
 #### Endpoint
 
 ```http
-POST /paystack-webhook
+POST /monnify-webhook
 ```
 
 #### Request Headers
 
 ```http
 Content-Type: application/json
-x-paystack-signature: <SIGNATURE>
+x-monify-signature: <SIGNATURE>
 ```
 
 #### Request Body
 
-Paystack sends different payloads based on the event type.
+Monnify sends different payloads based on the event type.
 
-**charge.success**:
+**TRANSACTION.COMPLETED**:
 ```json
 {
-  "event": "charge.success",
+  "eventType": "TRANSACTION.COMPLETED",
   "data": {
-    "reference": "ref_123456",
+    "transactionReference": "ref_123456",
     "amount": 300000,
     "customer": {
       "email": "user@example.com",
-      "customer_code": "CUS_xxxxx"
+      "name": "Customer Name"
     },
-    "metadata": {
-      "user_id": "550e8400-e29b-41d4-a716-446655440000",
-      "plan": "pro"
-    }
+    "contractCode": "MC_xxxxx"
   }
 }
 ```
 
-**subscription.create**:
+**SUBSCRIPTION.CREATED**:
 ```json
 {
-  "event": "subscription.create",
+  "eventType": "SUBSCRIPTION.CREATED",
   "data": {
-    "subscription_code": "SUB_xxxxx",
+    "contractCode": "MC_xxxxx",
     "customer": {
       "email": "user@example.com",
-      "customer_code": "CUS_xxxxx"
-    },
-    "plan": {
-      "name": "Pro Plan",
-      "amount": 300000
+      "name": "Customer Name"
     }
   }
 }
@@ -352,13 +345,12 @@ Paystack sends different payloads based on the event type.
 
 | Event | Action |
 |-------|--------|
-| `charge.success` | Update user to Pro plan, set credits to 1000 |
-| `subscription.create` | Create subscription record |
-| `subscription.disable` | Downgrade user to Free plan |
+| `SUCCESSFUL_TRANSACTION` | Update user to Pro plan, set credits to 1000 |
+| `MANDATE_UPDATE` | Handle mandate status changes (subscription activation/cancellation) |
 
 #### Security
 
-The webhook verifies the `x-paystack-signature` header to ensure requests are from Paystack.
+The webhook verifies the `x-monify-signature` header to ensure requests are from Monnify.
 
 ---
 

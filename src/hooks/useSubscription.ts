@@ -10,8 +10,10 @@ export interface Subscription {
   credits_max: number;
   last_refresh_date: string;
   subscription_end_date: string | null;
-  paystack_subscription_id: string | null;
-  paystack_customer_code: string | null;
+  monnify_contract_code: string | null;
+  monnify_customer_email: string | null;
+  monnify_customer_name: string | null;
+  monnify_transaction_reference: string | null;
   created_at: string;
   updated_at: string;
 }
