@@ -287,7 +287,7 @@ LOG_LEVEL=INFO
 ```bash
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-anon-key
-VITE_MONNIFY_PUBLIC_KEY=your_monnify_public_key
+VITE_PAYSTACK_PUBLIC_KEY=your_paystack_public_key
 ```
 
 ### Edge Function Secrets (Supabase)
@@ -296,7 +296,7 @@ VITE_MONNIFY_PUBLIC_KEY=your_monnify_public_key
 REDIS_URL=redis://...
 HUGGINGFACE_API_KEY=hf_...  # Optional, for API-based embeddings
 GEMINI_API_KEY=your-key
-MONNIFY_SECRET_KEY=your_monnify_secret_key
+PAYSTACK_SECRET_KEY=your_monnify_secret_key
 ```
 
 ## 🔌 API Reference
@@ -350,11 +350,11 @@ data: {"type":"sources","sources":[{"content":"...","similarity":0.85}]}
 data: [DONE]
 ```
 
-#### 3. `monnify-webhook`
+#### 3. `paystack-webhook`
 
-Handles payment webhooks from Monnify.
+Handles payment webhooks from Paystack.
 
-**Endpoint**: `POST /functions/v1/monnify-webhook`
+**Endpoint**: `POST /functions/v1/paystack-webhook`
 
 **Events Handled**:
 - `SUCCESSFUL_TRANSACTION` - Payment successful
