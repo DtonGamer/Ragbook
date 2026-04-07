@@ -18,7 +18,7 @@ import { getPricingConfig, PricingConfig } from "@/config/pricingConfig";
 
 declare global {
   interface Window {
-    MonnifySDK: any;
+    PaystackPop: any;
   }
 }
 
@@ -68,67 +68,59 @@ export default function Pricing() {
       return;
     }
 
-    setIsProcessing(true);
-
     // Get the Pro plan from the configuration
     const proPlan = pricingConfig.plans.find(plan => plan.id === 'pro');
     if (!proPlan) {
       console.error('Pro plan not found in pricing configuration');
       toast.error("Failed to initialize payment");
-      setIsProcessing(false);
       return;
     }
 
-    try {
-      // Check if Monnify SDK is available
-      if (!window.MonnifySDK) {
-        console.error('Monnify SDK not loaded');
-        toast.error("Payment system is not ready. Please try again later.");
-        setIsProcessing(false);
-        return;
-      }
+    // Check if Paystack SDK is available
+    if (!window.PaystackPop) {
+      console.error('Paystack SDK not loaded');
+      toast.error("Payment system is not ready. Please try again later.");
+      return;
+    }
 
-      // Initialize Monnify payment with correct parameters for Monnify SDK
-      const monnifyConfig = {
-        amount: proPlan.price / 100, // Convert from kobo to naira
-        currency: "NGN", // Monnify typically uses NGN
-        reference: String(new Date().getTime()),
-        customerFullName: user.user_metadata?.full_name || user.email.split('@')[0],
-        customerEmail: user.email,
-        customerPhoneNumber: user.phone || "", // Optional
-        apiKey: import.meta.env.VITE_MONNIFY_PUBLIC_KEY, // Use the public key
-        contractCode: import.meta.env.VITE_MONNIFY_CONTRACT_CODE,
-        paymentDescription: "Pro Plan Subscription",
+    setIsProcessing(true);
+
+    try {
+      const handler = window.PaystackPop.setup({
+        key: import.meta.env.VITE_PAYSTACK_PUBLIC_KEY,
+        email: user.email,
+        amount: proPlan.price, // already in kobo — Paystack expects kobo natively
+        currency: "NGN",
+        ref: `ragbook_${new Date().getTime()}`,
         metadata: {
           userId: user.id,
-          plan: "pro"
+          plan: "pro",
+          custom_fields: [
+            {
+              display_name: "User ID",
+              variable_name: "user_id",
+              value: user.id,
+            },
+          ],
         },
-        onLoadStart: () => {
-          console.log("Monnify SDK loading...");
-        },
-        onLoadComplete: () => {
-          console.log("Monnify SDK loaded successfully");
-        },
-        onComplete: (response: any) => {
-          console.log("Payment completed:", response);
+        onSuccess: (transaction: any) => {
+          console.log("Payment successful:", transaction.reference);
           setIsProcessing(false);
           setShowSuccessModal(true);
 
-          // Wait a moment for webhook to process
+          // Wait a moment for webhook to process before refreshing subscription
           setTimeout(() => {
-            // Call refreshSubscription without await since callback can't be async
             refreshSubscription();
           }, 2000);
         },
-        onClose: (data: any) => {
-          console.log("Payment modal closed:", data);
+        onCancel: () => {
+          console.log("Payment modal closed by user");
           setIsProcessing(false);
           toast.info("Payment cancelled");
-        }
-      };
+        },
+      });
 
-      // Call the initialize method (not a constructor!)
-      window.MonnifySDK.initialize(monnifyConfig);
+      handler.openIframe();
     } catch (error) {
       console.error('Payment initialization error:', error);
       toast.error("Failed to initialize payment");
@@ -185,7 +177,7 @@ export default function Pricing() {
                   </span>
                 </div>
                 <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-primary to-secondary transition-all"
                     style={{ width: `${(creditsLeft / creditsMax) * 100}%` }}
                   />
@@ -200,13 +192,13 @@ export default function Pricing() {
                   const isFreePlan = plan.id === 'free';
                   const isProPlan = plan.id === 'pro';
                   const isRecommended = plan.recommended;
-                  
+
                   return (
-                    <div 
+                    <div
                       key={plan.id}
                       className={`rounded-2xl ${
-                        isRecommended 
-                          ? 'border-2 border-primary/50 bg-gradient-to-br from-primary/5 to-secondary/5 p-5 lg:p-6 shadow-lg relative' 
+                        isRecommended
+                          ? 'border-2 border-primary/50 bg-gradient-to-br from-primary/5 to-secondary/5 p-5 lg:p-6 shadow-lg relative'
                           : 'border border-border/50 bg-card/50 p-5 lg:p-6 shadow-sm'
                       } transition-all duration-300 hover:shadow-lg hover:border-border hover:scale-[1.02] hover:-translate-y-1`}
                     >
@@ -217,20 +209,20 @@ export default function Pricing() {
                           </Badge>
                         </div>
                       )}
-                      
+
                       <div className="flex items-center justify-between mb-4 mt-2.5 lg:mt-0">
                         <div>
                           <h3 className="text-xl lg:text-2xl font-bold text-foreground mb-1">{plan.name}</h3>
                           <p className="text-xs lg:text-sm text-muted-foreground">
-                            {isFreePlan 
-                              ? 'Get started with basic features' 
+                            {isFreePlan
+                              ? 'Get started with basic features'
                               : 'Unlimited power for serious students'
                             }
                           </p>
                         </div>
                         <div className={`w-10 h-10 lg:w-12 lg:h-12 rounded-lg ${
-                          isRecommended 
-                            ? 'bg-primary flex items-center justify-center shadow-sm shadow-primary/20' 
+                          isRecommended
+                            ? 'bg-primary flex items-center justify-center shadow-sm shadow-primary/20'
                             : 'bg-primary/10 flex items-center justify-center'
                         } shrink-0`}>
                           {plan.icon === 'zap' ? (
@@ -244,7 +236,7 @@ export default function Pricing() {
                           ) : null}
                         </div>
                       </div>
-                      
+
                       <div className="mb-4 lg:mb-6">
                         <span className="text-3xl lg:text-4xl font-extrabold text-foreground">
                           ₦{plan.price / 100}{plan.creditsFrequency === 'month' ? '' : ''}
@@ -257,8 +249,8 @@ export default function Pricing() {
                       <ul className="space-y-2.5 lg:space-y-3 mb-4 lg:mb-6">
                         <li className="flex items-start gap-2.5 lg:gap-3">
                           <div className={`w-5 h-5 rounded-full ${
-                            isRecommended 
-                              ? 'bg-primary flex items-center justify-center' 
+                            isRecommended
+                              ? 'bg-primary flex items-center justify-center'
                               : 'bg-primary/10 flex items-center justify-center'
                           } shrink-0 mt-0.5`}>
                             <Check className={`w-3 h-3 ${
@@ -274,8 +266,8 @@ export default function Pricing() {
                         {plan.features.map((feature, index) => (
                           <li key={index} className="flex items-start gap-2.5 lg:gap-3">
                             <div className={`w-5 h-5 rounded-full ${
-                              isRecommended 
-                                ? 'bg-primary flex items-center justify-center' 
+                              isRecommended
+                                ? 'bg-primary flex items-center justify-center'
                                 : 'bg-primary/10 flex items-center justify-center'
                             } shrink-0 mt-0.5`}>
                               <Check className={`w-3 h-3 ${
@@ -291,8 +283,8 @@ export default function Pricing() {
                         ))}
                         <li className="flex items-start gap-2.5 lg:gap-3">
                           <div className={`w-5 h-5 rounded-full ${
-                            isRecommended 
-                              ? 'bg-primary flex items-center justify-center' 
+                            isRecommended
+                              ? 'bg-primary flex items-center justify-center'
                               : 'bg-primary/10 flex items-center justify-center'
                           } shrink-0 mt-0.5`}>
                             <Check className={`w-3 h-3 ${
@@ -307,8 +299,8 @@ export default function Pricing() {
                         </li>
                         <li className="flex items-start gap-2.5 lg:gap-3">
                           <div className={`w-5 h-5 rounded-full ${
-                            isRecommended 
-                              ? 'bg-primary flex items-center justify-center' 
+                            isRecommended
+                              ? 'bg-primary flex items-center justify-center'
                               : 'bg-primary/10 flex items-center justify-center'
                           } shrink-0 mt-0.5`}>
                             <Check className={`w-3 h-3 ${
@@ -329,9 +321,9 @@ export default function Pricing() {
                         disabled={isProPlan ? (isPro || isProcessing) : !isFreePlan}
                         variant={isRecommended ? undefined : "outline"}
                       >
-                        {isProPlan && isPro ? "✓ Current Plan" : 
-                         isProPlan && isProcessing ? "Processing..." : 
-                         isProPlan ? "Upgrade to Pro" : 
+                        {isProPlan && isPro ? "✓ Current Plan" :
+                         isProPlan && isProcessing ? "Processing..." :
+                         isProPlan ? "Upgrade to Pro" :
                          isFreePlan ? (isPro ? "Current Plan" : "Active Plan") : ""}
                       </Button>
                     </div>
