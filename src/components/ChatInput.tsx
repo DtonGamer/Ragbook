@@ -1,6 +1,4 @@
-import { useState } from "react";
-import { /*ModeSelector*/ } from "@/components/ModeSelector";
-import { Textarea } from "@/components/ui/textarea";
+import { useState, useRef } from "react";
 
 interface ChatInputProps {
   onSend: (message: string, mode: "auto" | "document" | "general") => void;
@@ -8,13 +6,22 @@ interface ChatInputProps {
 }
 
 export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
-  const defaultMode: "auto" | "document" | "general" = "auto"; // Default to auto mode
   const [input, setInput] = useState("");
+  // FIX BUG 3: Guard against double submission. On mobile, the virtual keyboard
+  // can fire keydown AND a synthetic click on the send button in the same tick,
+  // calling handleSubmit twice and creating a duplicate message/conversation.
+  const isSubmitting = useRef(false);
 
   const handleSubmit = () => {
+    if (isSubmitting.current) return; // guard
     if (input.trim() && !disabled) {
-      onSend(input.trim(), "auto"); // Pass default mode
+      isSubmitting.current = true;
+      onSend(input.trim(), "auto");
       setInput("");
+      // Reset after a short delay to allow the event loop to clear
+      setTimeout(() => {
+        isSubmitting.current = false;
+      }, 300);
     }
   };
 
@@ -25,8 +32,7 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
     }
   };
 
-  const handleKeyUp = (e: React.KeyboardEvent) => {
-    // Auto-resize textarea
+  const handleInput = (e: React.FormEvent<HTMLTextAreaElement>) => {
     const target = e.target as HTMLTextAreaElement;
     target.style.height = 'auto';
     target.style.height = Math.min(target.scrollHeight, 128) + 'px';
@@ -39,7 +45,7 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          onKeyUp={handleKeyUp}
+          onInput={handleInput}
           placeholder="Ask a question..."
           disabled={disabled}
           rows={1}
@@ -47,11 +53,6 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
           style={{
             height: 'auto',
             minHeight: '48px'
-          }}
-          onInput={(e) => {
-            const target = e.target as HTMLTextAreaElement;
-            target.style.height = 'auto';
-            target.style.height = Math.min(target.scrollHeight, 128) + 'px';
           }}
         />
         <button
