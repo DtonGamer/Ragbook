@@ -34,15 +34,9 @@ const Chat = () => {
   const { isPro, creditsLeft, refreshSubscription } = useSubscription();
 
   const [isLoading, setIsLoading] = useState(false);
-
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  // Note: In the refactored version, we don't need sidebar refresh trigger
-  // since the conversation management is handled by the hook
-  // const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
-  // We can still use it if needed for other reasons
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0);
 
-  // Use the conversation manager hook to handle conversation logic first
   const {
     messages: conversationMessages,
     setMessages,
@@ -54,11 +48,11 @@ const Chat = () => {
     isCreatingNew: isCreatingNewHook,
     loadConversation,
     handleNewConversation,
+    createConversation,  // FIX BUG 2: pull createConversation from the manager
   } = useConversationManager({
     onSidebarRefresh: () => setSidebarRefreshTrigger(prev => prev + 1)
   });
 
-  // Use the new hooks after getting the required variables
   const {
     messagesEndRef,
     scrollContainerRef,
@@ -72,7 +66,6 @@ const Chat = () => {
     setSidebarCollapsed: setHookSidebarCollapsed
   } = useScrollBehavior({ messages: conversationMessages });
 
-  // Use the message handler hook
   const {
     handleSendMessage: sendMessageFromHook,
     handleSuggestionClick: handleSuggestionClickFromHook,
@@ -80,32 +73,26 @@ const Chat = () => {
     setShowUpgradeModal: setHookShowUpgradeModal
   } = useMessageHandler({
     conversationId: conversationHookId,
+    setConversationId,       // FIX BUG 2: pass down so the handler can sync state
+    createConversation,      // FIX BUG 2: pass the single source of truth
     messages: conversationMessages,
     setMessages,
     setIsLoading,
     refreshSubscription
   });
 
-  // Use the cache hook for message deduplication
   const { deduplicateMessages } = useMessageCache();
 
-
-
-  // Create local version of handleSendMessage to maintain the original signature
   const handleSendMessage = async (content: string, mode: "auto" | "document" | "general" = "auto") => {
-    // Enable smooth scrolling for new messages being added and reset user scroll state
     setShouldAutoScroll(true);
     setIsUserScrolling(false);
-
     await sendMessageFromHook(content, mode);
   };
 
   const handleSuggestionClick = (suggestion: string) => {
-    // Auto-fill the input with the suggestion and use auto mode
     handleSuggestionClickFromHook(suggestion, "auto");
   };
 
-  // Keyboard shortcut for toggling sidebar - keeping this here instead of hook
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === 'b') {
@@ -113,47 +100,32 @@ const Chat = () => {
         setSidebarCollapsed(!sidebarCollapsed);
       }
     };
-
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [sidebarCollapsed]);
 
-
-
   useEffect(() => {
     console.log("Messages updated:", conversationMessages.length);
   }, [conversationMessages]);
-
-
-
-
-
-
-
 
   const handleSignOut = async () => {
     await signOut();
     navigate("/auth");
   };
 
-
   const sidebar = (
-  <div className="h-full flex flex-col">
-     {/* ConversationSidebar now handles its own header */}
-    <ConversationSidebar
+    <div className="h-full flex flex-col">
+      <ConversationSidebar
         currentConversationId={conversationHookId}
         onConversationSelect={loadConversation}
         onNewConversation={handleNewConversation}
         onClearCurrentConversation={handleNewConversation}
-       collapsed={sidebarCollapsed}
+        collapsed={sidebarCollapsed}
         className="flex-1 min-h-0"
         refreshTrigger={sidebarRefreshTrigger}
       />
 
-
-
-      {/* Footer - Fixed at bottom */}
-<div className={`border-t border-border/50 flex-shrink-0 ${sidebarCollapsed ? 'p-2 pb-safe' : 'p-3 pb-safe'}`}>
+      <div className={`border-t border-border/50 flex-shrink-0 ${sidebarCollapsed ? 'p-2 pb-safe' : 'p-3 pb-safe'}`}>
         {!sidebarCollapsed ? (
           <div className="space-y-2">
             {user && (
@@ -256,7 +228,6 @@ const Chat = () => {
         )}
       </div>
     </div>
-
   );
 
   return (
@@ -267,26 +238,22 @@ const Chat = () => {
       onNewConversation={handleNewConversation}
     >
       <div className="flex flex-col h-full">
-        {/* Messages */}
         <div className="flex-1 overflow-y-auto pb-36 md:pb-32 custom-scrollbar" ref={(el) => {
           if (el && !scrollContainerRef.current) {
             scrollContainerRef.current = el;
           }
         }}>
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-8">
-            {/* Conversation manager handles welcome messages and new conversation options,
-                 or returns null when regular messages should be displayed */}
             <ConversationManager
               initialMessages={conversationMessages}
               initialConversationId={conversationHookId}
               onMessagesUpdate={setMessages}
               onConversationIdUpdate={setConversationId}
-              onIsLoadingConversationUpdate={() => {}} // ConversationManager still expects this prop
+              onIsLoadingConversationUpdate={() => {}}
               onShowWelcomeMessageUpdate={setShowWelcomeMessage}
-              onIsNavigatingToChatUpdate={() => {}} // ConversationManager still expects this prop
+              onIsNavigatingToChatUpdate={() => {}}
               isLoading={isLoading || isLoadingConversationHook}
               onNewConversation={handleNewConversation}
-              // Pass the values from the conversation manager hook
               conversationId={conversationHookId}
               isLoadingConversation={isLoadingConversationHook}
               showWelcomeMessage={showWelcomeMessageHook}
@@ -294,15 +261,11 @@ const Chat = () => {
               loadConversation={loadConversation}
               handleNewConversation={handleNewConversation}
             />
-            {/* Show messages when ConversationManager returns null (has no special UI to render)
-                 and ensure that only one loading indicator appears at a time */}
-            { 
-             !isLoadingConversationHook && 
-             (conversationMessages.length > 0) && (
+            {!isLoadingConversationHook && conversationMessages.length > 0 && (
               <MessageList
                 messages={conversationMessages}
                 isLoading={isLoading}
-                isNavigatingToChat={false} // Simplified hook doesn't track this
+                isNavigatingToChat={false}
                 isLoadingConversation={isLoadingConversationHook}
                 messagesEndRef={messagesEndRef}
                 onSuggestionClick={handleSuggestionClick}
@@ -311,7 +274,6 @@ const Chat = () => {
           </div>
         </div>
 
-        {/* Input - Fixed footer with dynamic left offset */}
         <div className={`fixed bottom-0 left-0 right-0 border-t border-border/50 backdrop-blur-sm bg-card/95 shadow-lg z-30 transition-all duration-300 pb-safe ${sidebarCollapsed ? 'lg:left-20' : 'lg:left-80'}`}>
           <div className="max-w-4xl mx-auto px-5 sm:px-4 py-4">
             <ChatInput
@@ -325,7 +287,6 @@ const Chat = () => {
         </div>
       </div>
 
-      {/* Upgrade Modal */}
       <UpgradeModal
         open={hookShowUpgradeModal}
         onOpenChange={setHookShowUpgradeModal}
