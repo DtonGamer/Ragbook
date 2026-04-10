@@ -71,7 +71,7 @@ const AppContent = () => {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
-          <Sonner />
+          <Sonner position="top-center" />
           <DevConsoleToggle onToggle={handleConsoleToggle} />
           <BrowserRouter>
             <PageTransition>
