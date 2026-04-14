@@ -2,7 +2,6 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { defineConfig } from "vite";
 
-// https://vitejs.dev/config/ 
 export default defineConfig(({ mode }) => ({
   base: './',
   server: {
@@ -17,14 +16,11 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     target: "esnext",
-    // Change from "esbuild" to "terser"
-    minify: mode === "production" ? "terser" : "esbuild",
+    minify: "esbuild", // Changed from "terser" to "esbuild"
     sourcemap: mode === "development",
-    terserOptions: {
-      compress: {
-        drop_console: mode === "production",
-        drop_debugger: mode === "production",
-      },
+    // Use esbuild to drop console in production
+    esbuildOptions: {
+      drop: mode === "production" ? ["console", "debugger"] : [],
     },
     rollupOptions: {
       output: {
