@@ -1,5 +1,7 @@
 # RAG Book - Enhanced AI Study Assistant
 
+# Built with Qwen Code (terminal agent)
+
 This project is a production-grade, scalable Retrieval-Augmented Generation (RAG) system designed for students. It features an asynchronous pipeline for processing large documents (including scanned PDFs with OCR), a credit-based payment system, and real-time status updates, all powered by a robust backend using Supabase, Redis, and a Python worker.
 
 ## 🚀 Core Features
